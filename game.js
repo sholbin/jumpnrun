@@ -104,6 +104,15 @@ class GameScene extends Phaser.Scene {
         this.lastDirection = 'right';
         this.isSprinting = false;
         this.enemies = null;
+        this.flyingEnemies = null;
+        this.spikes = null;
+        this.lava = null;
+        this.lives = 3;
+        this.score = 0;
+        this.livesText = null;
+        this.scoreText = null;
+        this.coins = null;
+        this.soundContext = null;
     }
 
     create() {
@@ -130,15 +139,40 @@ class GameScene extends Phaser.Scene {
         // Player with animations
         this.createAnimatedPlayer(width, height);
 
+        // Coins
+        this.coins = this.physics.add.group();
+        this.generateCoinTexture();
+        this.createCoins(width, height);
+
+        // Hazards & Extra Enemies
+        this.spikes = this.physics.add.staticGroup();
+        this.lava = this.physics.add.staticGroup();
+        this.flyingEnemies = this.physics.add.group();
+
+        this.generateSpikeTexture();
+        this.generateLavaTexture();
+        this.generateBeeTexture();
+
+        this.createHazards(width, height);
+        this.createFlyingEnemies(width, height);
+
         // Physics
         this.physics.add.collider(this.player, this.platforms);
         this.physics.add.collider(this.enemies, this.platforms);
         this.physics.add.collider(this.player, this.enemies, this.hitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
+        this.physics.add.collider(this.player, this.spikes, this.hitHazard, null, this);
+        this.physics.add.overlap(this.player, this.lava, this.hitLava, null, this);
+        this.physics.add.overlap(this.player, this.flyingEnemies, this.hitEnemy, null, this);
 
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+        this.rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+
+        // UI
+        this.createUI();
 
         if (isMobile) {
             this.setupMobileControls();
@@ -231,11 +265,12 @@ class GameScene extends Phaser.Scene {
 
             // Scarf tail (flowing when moving)
             if (!isIdle) {
+                g.fillStyle(0xff3d00, 1);
                 g.beginPath();
-                g.moveTo(ox + 36, frameH - 42 + bodyY);
-                g.lineTo(ox + 48, frameH - 36 + bodyY);
-                g.lineTo(ox + 44, frameH - 32 + bodyY);
-                g.lineTo(ox + 36, frameH - 38 + bodyY);
+                g.moveTo(ox + 12, frameH - 42 + bodyY);
+                g.lineTo(ox + 0, frameH - 36 + bodyY);
+                g.lineTo(ox + 4, frameH - 32 + bodyY);
+                g.lineTo(ox + 12, frameH - 38 + bodyY);
                 g.closePath();
                 g.fillPath();
             }
@@ -254,7 +289,7 @@ class GameScene extends Phaser.Scene {
             // Hair flow physics (simulating wind/inertia)
             let hairFlow = 0;
             if (!isIdle) {
-                hairFlow = -6; // Hair blows back to the left when moving
+                hairFlow = -8; // Blow backward (sprite faces right by default, so move left)
             }
 
             // Orange hair base
@@ -414,10 +449,16 @@ class GameScene extends Phaser.Scene {
         const platformKey = 'grass_platform';
         const tileWidth = 80;
 
-        // Ground - seamless tiling
+        // Ground - seamless tiling with lava pits
         const groundY = height - 20;
+        const lavaX = [width * 0.9, width * 1.7, width * 2.5];
+
         for (let x = -100; x < width * 4; x += tileWidth - 1) {
-            this.platforms.create(x, groundY, platformKey);
+            // Check if this X is in a lava pit area
+            const isInLava = lavaX.some(lx => Math.abs(x - lx) < 60);
+            if (!isInLava) {
+                this.platforms.create(x, groundY, platformKey);
+            }
         }
 
         // Floating platforms
@@ -483,15 +524,202 @@ class GameScene extends Phaser.Scene {
     }
 
     hitEnemy(player, enemy) {
-        // Simple game over / restart logic
-        this.physics.pause();
-        player.setTint(0xff0000);
-        player.anims.play('idle');
+        // Check if player is falling onto the enemy (kill mechanic)
+        if (player.body.velocity.y > 0 && player.y < enemy.y - 10) {
+            enemy.destroy();
+            player.setVelocityY(-350); // Bounce up
+            this.updateScore(100);
+            this.playSound('stomp');
+            return;
+        }
 
-        // Restart scene after delay
-        this.time.delayedCall(1000, () => {
-            this.scene.restart();
+        // Damage player
+        this.lives--;
+        this.updateUI();
+        this.playSound('hurt');
+
+        if (this.lives <= 0) {
+            this.physics.pause();
+            player.setTint(0xff0000);
+            player.anims.play('idle');
+
+            this.time.delayedCall(1500, () => {
+                this.lives = 3;
+                this.score = 0;
+                this.scene.restart();
+            });
+        } else {
+            // Respawn or temporary invincibility
+            player.setTint(0xffcccc);
+            player.setAlpha(0.6);
+            this.physics.world.disable(player.body);
+
+            this.time.delayedCall(1000, () => {
+                player.clearTint();
+                player.setAlpha(1);
+                this.physics.world.enable(player.body);
+            });
+
+            // Push player back
+            player.setVelocityX(this.lastDirection === 'right' ? -200 : 200);
+            player.setVelocityY(-200);
+        }
+    }
+
+    createUI() {
+        const textStyle = {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '24px',
+            fill: '#fff',
+            stroke: '#000',
+            strokeThickness: 4
+        };
+
+        this.scoreText = this.add.text(20, 20, 'Score: 0', textStyle).setScrollFactor(0);
+        this.livesText = this.add.text(20, 50, 'Lives: ❤️❤️❤️', textStyle).setScrollFactor(0);
+
+        // PC Hint
+        if (!isMobile) {
+            this.add.text(20, 80, '[R] to Reset', { ...textStyle, fontSize: '14px', fill: '#aaa' }).setScrollFactor(0);
+        }
+
+        this.updateUI();
+    }
+
+    updateUI() {
+        if (this.scoreText) this.scoreText.setText(`Score: ${this.score}`);
+        if (this.livesText) {
+            let hearts = '';
+            for (let i = 0; i < this.lives; i++) hearts += '❤️';
+            this.livesText.setText(`Lives: ${hearts}`);
+        }
+    }
+
+    updateScore(amount) {
+        this.score += amount;
+        this.updateUI();
+    }
+
+    generateCoinTexture() {
+        const g = this.make.graphics();
+        const size = 20;
+
+        // Golden body
+        g.fillStyle(0xffd700, 1);
+        g.fillCircle(size / 2, size / 2, size / 2);
+
+        // Inner detail
+        g.lineStyle(2, 0xdaa520, 1);
+        g.strokeCircle(size / 2, size / 2, size / 2 - 3);
+
+        // Shine
+        g.fillStyle(0xffffff, 0.6);
+        g.fillCircle(size / 3, size / 3, 3);
+
+        g.generateTexture('coin', size, size);
+        g.destroy();
+    }
+
+    createCoins(width, height) {
+        // Add some coins above platforms
+        const coinPositions = [
+            { x: width * 0.4, y: height * 0.53 },
+            { x: width * 0.43, y: height * 0.53 },
+            { x: width * 0.75, y: height * 0.43 },
+            { x: width * 0.78, y: height * 0.43 },
+            { x: width * 0.15, y: height * 0.31 },
+            { x: width * 1.1, y: height * 0.48 },
+            { x: width * 1.5, y: height * 0.33 },
+            { x: width * 1.9, y: height * 0.43 },
+            { x: width * 2.3, y: height * 0.35 },
+            { x: width * 0.6, y: height - 60 },
+            { x: width * 0.8, y: height - 60 },
+            { x: width * 1.0, y: height - 60 },
+        ];
+
+        coinPositions.forEach(pos => {
+            const coin = this.coins.create(pos.x, pos.y, 'coin');
+            coin.body.setAllowGravity(false); // Make coins float!
+
+            // Add floating animation
+            this.tweens.add({
+                targets: coin,
+                y: pos.y - 10,
+                duration: 1000 + Math.random() * 500,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
         });
+    }
+
+    collectCoin(player, coin) {
+        coin.disableBody(true, true);
+        this.updateScore(10);
+        this.playSound('coin');
+    }
+
+    playSound(type) {
+        try {
+            if (!this.soundContext) {
+                this.soundContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Resume context if suspended (browser security)
+            if (this.soundContext.state === 'suspended') {
+                this.soundContext.resume();
+            }
+
+            const ctx = this.soundContext;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            const now = ctx.currentTime;
+
+            switch (type) {
+                case 'jump':
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                    break;
+                case 'coin':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                    break;
+                case 'stomp':
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                    break;
+                case 'hurt':
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.linearRampToValueAtTime(40, now + 0.3);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                    break;
+            }
+        } catch (e) {
+            console.warn("Sound error:", e);
+        }
     }
 
     createAnimatedPlayer(width, height) {
@@ -606,6 +834,7 @@ class GameScene extends Phaser.Scene {
     doJump() {
         if (this.player.body.touching.down) {
             this.player.setVelocityY(-520);
+            this.playSound('jump');
         }
     }
 
@@ -617,6 +846,11 @@ class GameScene extends Phaser.Scene {
         // Check sprint state (PC: SHIFT key)
         if (!isMobile) {
             this.isSprinting = this.shiftKey.isDown;
+        }
+
+        // Restart shortcut (PC)
+        if (this.rKey && Phaser.Input.Keyboard.JustDown(this.rKey)) {
+            this.scene.restart();
         }
 
         const speed = this.isSprinting ? sprintSpeed : normalSpeed;
@@ -691,17 +925,120 @@ class GameScene extends Phaser.Scene {
                 enemy.setFlipX(false); // look right
             }
         });
+
+        // Flying Enemy Logic
+        this.updateFlyingEnemies(this.time.now);
     }
 
     shutdown() {
         const joystickZone = document.getElementById('joystick-zone');
         const jumpBtn = document.getElementById('jump-btn');
+        const sprintBtn = document.getElementById('sprint-btn');
         if (joystickZone) joystickZone.remove();
         if (jumpBtn) jumpBtn.remove();
+        if (sprintBtn) sprintBtn.remove();
         if (joystick) {
             joystick.destroy();
             joystick = null;
         }
+    }
+
+    generateSpikeTexture() {
+        const g = this.make.graphics();
+        const size = 32;
+        g.fillStyle(0x9e9e9e, 1);
+        g.beginPath();
+        g.moveTo(0, size);
+        g.lineTo(size / 2, 0);
+        g.lineTo(size, size);
+        g.closePath();
+        g.fillPath();
+        g.generateTexture('spike', size, size);
+        g.destroy();
+    }
+
+    generateLavaTexture() {
+        const g = this.make.graphics();
+        const w = 80, h = 40;
+        g.fillStyle(0xff4500, 1);
+        g.fillRect(0, 0, w, h);
+        g.fillStyle(0xff8c00, 1);
+        for (let i = 0; i < 3; i++) {
+            g.fillCircle(Math.random() * w, Math.random() * h, 8);
+        }
+        g.generateTexture('lava', w, h);
+        g.destroy();
+    }
+
+    generateBeeTexture() {
+        const g = this.make.graphics();
+        const w = 40, h = 32;
+        // Body
+        g.fillStyle(0xffd700, 1);
+        g.fillEllipse(w / 2, h / 2, 30, 20);
+        // Stripes
+        g.fillStyle(0x000000, 1);
+        g.fillRect(15, 8, 4, 16);
+        g.fillRect(23, 8, 4, 16);
+        // Wings
+        g.fillStyle(0xffffff, 0.7);
+        g.fillEllipse(15, 12, 12, 8);
+        g.fillEllipse(25, 12, 12, 8);
+        // Eye
+        g.fillStyle(0x000000, 1);
+        g.fillCircle(30, 14, 2);
+
+        g.generateTexture('bee', w, h);
+        g.destroy();
+    }
+
+    createHazards(width, height) {
+        // Add spikes
+        this.spikes.create(width * 0.5, height - 36, 'spike');
+        this.spikes.create(width * 1.2, height - 36, 'spike');
+        this.spikes.create(width * 2.1, height - 36, 'spike');
+
+        // Add lava pits
+        const lavaX = [width * 0.9, width * 1.7, width * 2.5];
+        lavaX.forEach(x => {
+            this.lava.create(x, height - 10, 'lava').setScale(2, 1);
+        });
+    }
+
+    createFlyingEnemies(width, height) {
+        const flyData = [
+            { x: width * 1.3, y: height * 0.3, range: 200 },
+            { x: width * 2.0, y: height * 0.25, range: 150 }
+        ];
+
+        flyData.forEach(data => {
+            const bee = this.flyingEnemies.create(data.x, data.y, 'bee');
+            bee.body.setAllowGravity(false);
+            bee.setData('startX', data.x);
+            bee.setData('startY', data.y);
+            bee.setData('range', data.range);
+        });
+    }
+
+    hitHazard(player, spike) {
+        this.hitEnemy(player, spike);
+    }
+
+    hitLava(player, lava) {
+        this.lives = 0;
+        this.hitEnemy(player, lava);
+    }
+
+    updateFlyingEnemies(time) {
+        this.flyingEnemies.getChildren().forEach(bee => {
+            const startX = bee.getData('startX');
+            const range = bee.getData('range');
+            bee.x = startX + Math.sin(time / 1000) * range;
+            bee.y = bee.getData('startY') + Math.sin(time / 500) * 40;
+
+            // Flip based on direction (face left when moving left)
+            bee.setFlipX(Math.cos(time / 1000) < 0);
+        });
     }
 }
 
