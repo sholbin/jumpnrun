@@ -878,33 +878,66 @@ class GameScene extends Phaser.Scene {
             this.bgImage.tilePositionX = this.cameras.main.scrollX * 0.2;
         }
 
-        // Movement
+        // Movement with air momentum
+        const isOnGround = this.player.body.touching.down;
+        const airDrag = 0.98; // How much velocity is retained each frame in air
+        const airControl = 0.3; // Reduced control while in air
+
         if (isMobile) {
             if (joystickData.x < -0.3) {
-                this.player.setVelocityX(-speed);
+                if (isOnGround) {
+                    this.player.setVelocityX(-speed);
+                } else {
+                    // Air control - add force but don't override momentum
+                    this.player.setVelocityX(this.player.body.velocity.x - speed * airControl * 0.1);
+                }
                 isMoving = true;
                 this.lastDirection = 'left';
             } else if (joystickData.x > 0.3) {
-                this.player.setVelocityX(speed);
+                if (isOnGround) {
+                    this.player.setVelocityX(speed);
+                } else {
+                    this.player.setVelocityX(this.player.body.velocity.x + speed * airControl * 0.1);
+                }
                 isMoving = true;
                 this.lastDirection = 'right';
             } else {
-                this.player.setVelocityX(0);
+                // No input - apply drag on ground, momentum in air
+                if (isOnGround) {
+                    this.player.setVelocityX(0);
+                } else {
+                    // Gradually slow down in air
+                    this.player.setVelocityX(this.player.body.velocity.x * airDrag);
+                }
             }
         } else {
             if (this.cursors.left.isDown) {
-                this.player.setVelocityX(-speed);
+                if (isOnGround) {
+                    this.player.setVelocityX(-speed);
+                } else {
+                    this.player.setVelocityX(this.player.body.velocity.x - speed * airControl * 0.1);
+                }
                 isMoving = true;
                 this.lastDirection = 'left';
             } else if (this.cursors.right.isDown) {
-                this.player.setVelocityX(speed);
+                if (isOnGround) {
+                    this.player.setVelocityX(speed);
+                } else {
+                    this.player.setVelocityX(this.player.body.velocity.x + speed * airControl * 0.1);
+                }
                 isMoving = true;
                 this.lastDirection = 'right';
             } else {
-                this.player.setVelocityX(0);
+                // No input - apply drag on ground, momentum in air
+                if (isOnGround) {
+                    this.player.setVelocityX(0);
+                } else {
+                    // Gradually slow down in air
+                    this.player.setVelocityX(this.player.body.velocity.x * airDrag);
+                }
             }
 
-            if (this.spaceKey.isDown && this.player.body.touching.down) {
+            if (this.spaceKey.isDown && isOnGround) {
                 this.player.setVelocityY(-520);
             }
         }
