@@ -114,6 +114,8 @@ class GameScene extends Phaser.Scene {
         this.coins = null;
         this.soundContext = null;
         this.isInvincible = false;
+        this.fallTimer = 0;
+        this.highScore = parseInt(localStorage.getItem('superNoeHighScore') || '0');
     }
 
     create() {
@@ -592,6 +594,7 @@ class GameScene extends Phaser.Scene {
 
         this.scoreText = this.add.text(20, 20, 'Score: 0', textStyle).setScrollFactor(0);
         this.livesText = this.add.text(20, 50, 'Lives: ❤️❤️❤️', textStyle).setScrollFactor(0);
+        this.highScoreText = this.add.text(20, 110, `High: ${this.highScore}`, { ...textStyle, fontSize: '18px', fill: '#ffd700' }).setScrollFactor(0);
 
         // PC Hint
         if (!isMobile) {
@@ -612,6 +615,11 @@ class GameScene extends Phaser.Scene {
 
     updateScore(amount) {
         this.score += amount;
+        // Update highscore if needed
+        if (this.score > this.highScore) {
+            this.highScore = this.score;
+            localStorage.setItem('superNoeHighScore', this.highScore.toString());
+        }
         this.updateUI();
     }
 
@@ -848,7 +856,15 @@ class GameScene extends Phaser.Scene {
 
     doJump() {
         if (this.player.body.touching.down) {
-            this.player.setVelocityY(-520);
+            // Sprint jump: higher and more horizontal momentum
+            if (this.isSprinting) {
+                this.player.setVelocityY(-600); // Higher jump
+                // Boost horizontal velocity in sprint direction
+                const boostDir = this.lastDirection === 'right' ? 1 : -1;
+                this.player.setVelocityX(this.player.body.velocity.x + boostDir * 80);
+            } else {
+                this.player.setVelocityY(-520); // Normal jump
+            }
             this.playSound('jump');
         }
     }
@@ -860,6 +876,26 @@ class GameScene extends Phaser.Scene {
             this.score = 0;
             this.scene.restart();
             return;
+        }
+
+        // Fall death check (2 seconds of free-falling)
+        if (!this.player.body.touching.down && this.player.body.velocity.y > 100) {
+            this.fallTimer += this.game.loop.delta;
+            if (this.fallTimer > 2000) { // 2 seconds
+                this.fallTimer = 0;
+                this.lives--;
+                this.updateUI();
+                this.playSound('hurt');
+                if (this.lives <= 0) {
+                    this.scene.restart();
+                } else {
+                    // Respawn at start
+                    this.player.setPosition(100, 100);
+                    this.player.setVelocity(0, 0);
+                }
+            }
+        } else {
+            this.fallTimer = 0;
         }
 
         const normalSpeed = 220;
