@@ -412,13 +412,13 @@ class GameScene extends Phaser.Scene {
         }
         hills.setScrollFactor(0.2);
 
-        // Trees - Draw from ground level
+        // Trees - Draw from ground level (same scroll rate as platforms so they look grounded)
         const groundY = height - 20;
         const trees = this.add.graphics();
         for (let i = 0; i < 20; i++) {
             this.drawTree(trees, i * 200 + 50, groundY, 80 + Math.random() * 60);
         }
-        trees.setScrollFactor(0.4);
+        trees.setScrollFactor(1); // Same as platforms so they look grounded
     }
 
     drawCloud(g, x, y, scale) {
@@ -538,11 +538,13 @@ class GameScene extends Phaser.Scene {
     hitEnemy(player, enemy) {
         if (this.isInvincible) return;
 
-        // Kill mechanic: player is above enemy and moving down
-        const playerBottom = player.y + player.body.height / 2;
-        const enemyTop = enemy.y - enemy.body.height / 2;
+        // Kill mechanic: check if player's feet are above enemy's head
+        // Use body.bottom and body.top for accurate collision
+        const playerFeet = player.body.bottom;
+        const enemyHead = enemy.body.top;
 
-        if (player.body.velocity.y > 0 && playerBottom < enemyTop + 15) {
+        // Player must be falling AND their feet must be at or above the enemy's head
+        if (player.body.velocity.y > 0 && playerFeet <= enemyHead + 20) {
             enemy.destroy();
             player.setVelocityY(-400); // Bounce up
             this.updateScore(100);
