@@ -160,7 +160,7 @@ class GameScene extends Phaser.Scene {
         // Physics
         this.physics.add.collider(this.player, this.platforms);
         this.physics.add.collider(this.enemies, this.platforms);
-        this.physics.add.collider(this.player, this.enemies, this.hitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.enemies, this.hitEnemy, null, this);
         this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
         this.physics.add.collider(this.player, this.spikes, this.hitHazard, null, this);
         this.physics.add.overlap(this.player, this.lava, this.hitLava, null, this);
