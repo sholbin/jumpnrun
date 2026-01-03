@@ -538,13 +538,8 @@ class GameScene extends Phaser.Scene {
     hitEnemy(player, enemy) {
         if (this.isInvincible) return;
 
-        // Kill mechanic: check if player's feet are above enemy's head
-        // Use body.bottom and body.top for accurate collision
-        const playerFeet = player.body.bottom;
-        const enemyHead = enemy.body.top;
-
-        // Player must be falling AND their feet must be at or above the enemy's head
-        if (player.body.velocity.y > 0 && playerFeet <= enemyHead + 20) {
+        // Classic Mario-style stomp: player is falling AND player center is above enemy center
+        if (player.body.velocity.y > 0 && player.y < enemy.y) {
             enemy.destroy();
             player.setVelocityY(-400); // Bounce up
             this.updateScore(100);
