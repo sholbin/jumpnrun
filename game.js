@@ -915,7 +915,9 @@ class GameScene extends Phaser.Scene {
                 if (isOnGround) {
                     this.player.setVelocityX(-speed);
                 } else {
-                    this.player.setVelocityX(this.player.body.velocity.x - speed * airControl * 0.1);
+                    // Air control with velocity cap
+                    const newVel = this.player.body.velocity.x - speed * airControl * 0.1;
+                    this.player.setVelocityX(Math.max(newVel, -speed)); // Cap at max speed
                 }
                 isMoving = true;
                 this.lastDirection = 'left';
@@ -923,7 +925,9 @@ class GameScene extends Phaser.Scene {
                 if (isOnGround) {
                     this.player.setVelocityX(speed);
                 } else {
-                    this.player.setVelocityX(this.player.body.velocity.x + speed * airControl * 0.1);
+                    // Air control with velocity cap
+                    const newVel = this.player.body.velocity.x + speed * airControl * 0.1;
+                    this.player.setVelocityX(Math.min(newVel, speed)); // Cap at max speed
                 }
                 isMoving = true;
                 this.lastDirection = 'right';
