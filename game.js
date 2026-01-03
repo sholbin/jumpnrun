@@ -113,6 +113,7 @@ class GameScene extends Phaser.Scene {
         this.scoreText = null;
         this.coins = null;
         this.soundContext = null;
+        this.isInvincible = false;
     }
 
     create() {
@@ -461,15 +462,19 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Floating platforms
+        // Floating platforms - Staircase pattern for reachability
         const floats = [
-            { x: width * 0.4, y: height * 0.6 },
-            { x: width * 0.75, y: height * 0.5 },
-            { x: width * 0.15, y: height * 0.38 },
-            { x: width * 1.1, y: height * 0.55 },
-            { x: width * 1.5, y: height * 0.4 },
-            { x: width * 1.9, y: height * 0.5 },
-            { x: width * 2.3, y: height * 0.42 },
+            { x: width * 0.2, y: height * 0.75 }, // Landing 1
+            { x: width * 0.35, y: height * 0.65 }, // Landing 2
+            { x: width * 0.5, y: height * 0.55 }, // Landing 3
+            { x: width * 0.7, y: height * 0.45 }, // Landing 4
+            { x: width * 0.9, y: height * 0.35 }, // High Landing
+            { x: width * 1.2, y: height * 0.45 },
+            { x: width * 1.5, y: height * 0.55 },
+            { x: width * 1.8, y: height * 0.45 },
+            { x: width * 2.1, y: height * 0.35 },
+            { x: width * 2.5, y: height * 0.45 },
+            { x: width * 2.8, y: height * 0.55 },
         ];
 
         floats.forEach(f => {
@@ -524,6 +529,8 @@ class GameScene extends Phaser.Scene {
     }
 
     hitEnemy(player, enemy) {
+        if (this.isInvincible) return;
+
         // Check if player is falling onto the enemy (kill mechanic)
         if (player.body.velocity.y > 0 && player.y < enemy.y - 10) {
             enemy.destroy();
@@ -549,20 +556,21 @@ class GameScene extends Phaser.Scene {
                 this.scene.restart();
             });
         } else {
-            // Respawn or temporary invincibility
+            // Temporary invincibility
+            this.isInvincible = true;
             player.setTint(0xffcccc);
             player.setAlpha(0.6);
-            this.physics.world.disable(player.body);
 
-            this.time.delayedCall(1000, () => {
+            this.time.delayedCall(1500, () => {
+                this.isInvincible = false;
                 player.clearTint();
                 player.setAlpha(1);
-                this.physics.world.enable(player.body);
             });
 
-            // Push player back
-            player.setVelocityX(this.lastDirection === 'right' ? -200 : 200);
-            player.setVelocityY(-200);
+            // Knockback logic
+            const bounceDirection = (player.x < enemy.x) ? -300 : 300;
+            player.setVelocityX(bounceDirection);
+            player.setVelocityY(-300);
         }
     }
 
@@ -839,6 +847,14 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
+        // Restart shortcut (PC) - Check this first to ensure responsiveness
+        if (this.rKey && Phaser.Input.Keyboard.JustDown(this.rKey)) {
+            this.lives = 3;
+            this.score = 0;
+            this.scene.restart();
+            return;
+        }
+
         const normalSpeed = 220;
         const sprintSpeed = 400;
         let isMoving = false;
@@ -846,11 +862,6 @@ class GameScene extends Phaser.Scene {
         // Check sprint state (PC: SHIFT key)
         if (!isMobile) {
             this.isSprinting = this.shiftKey.isDown;
-        }
-
-        // Restart shortcut (PC)
-        if (this.rKey && Phaser.Input.Keyboard.JustDown(this.rKey)) {
-            this.scene.restart();
         }
 
         const speed = this.isSprinting ? sprintSpeed : normalSpeed;
@@ -993,13 +1004,13 @@ class GameScene extends Phaser.Scene {
     }
 
     createHazards(width, height) {
-        // Add spikes
-        this.spikes.create(width * 0.5, height - 36, 'spike');
-        this.spikes.create(width * 1.2, height - 36, 'spike');
-        this.spikes.create(width * 2.1, height - 36, 'spike');
+        // Add spikes - Move first spike further away (was 0.5)
+        this.spikes.create(width * 0.8, height - 36, 'spike');
+        this.spikes.create(width * 1.5, height - 36, 'spike');
+        this.spikes.create(width * 2.5, height - 36, 'spike');
 
         // Add lava pits
-        const lavaX = [width * 0.9, width * 1.7, width * 2.5];
+        const lavaX = [width * 1.2, width * 2.0, width * 3.0];
         lavaX.forEach(x => {
             this.lava.create(x, height - 10, 'lava').setScale(2, 1);
         });
