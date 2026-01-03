@@ -880,8 +880,8 @@ class GameScene extends Phaser.Scene {
 
         // Movement with air momentum
         const isOnGround = this.player.body.touching.down;
-        const airDrag = 0.98; // How much velocity is retained each frame in air
-        const airControl = 0.3; // Reduced control while in air
+        const airDrag = 0.92; // How much velocity is retained each frame in air (lower = slows faster)
+        const airControl = 0.6; // Control while in air (higher = easier to change direction)
 
         if (isMobile) {
             if (joystickData.x < -0.3) {
