@@ -412,10 +412,11 @@ class GameScene extends Phaser.Scene {
         }
         hills.setScrollFactor(0.2);
 
-        // Trees
+        // Trees - Draw from ground level
+        const groundY = height - 20;
         const trees = this.add.graphics();
         for (let i = 0; i < 20; i++) {
-            this.drawTree(trees, i * 200 + 50, height - 80, 80 + Math.random() * 60);
+            this.drawTree(trees, i * 200 + 50, groundY, 80 + Math.random() * 60);
         }
         trees.setScrollFactor(0.4);
     }
@@ -462,19 +463,24 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Floating platforms - Staircase pattern for reachability
+        // Floating platforms - Use fixed pixel heights from ground for reliable jumps
+        // Max jump height is ~130px, so each step should be ~80-100px apart vertically
+        // groundY is already defined above
         const floats = [
-            { x: width * 0.2, y: height * 0.75 }, // Landing 1
-            { x: width * 0.35, y: height * 0.65 }, // Landing 2
-            { x: width * 0.5, y: height * 0.55 }, // Landing 3
-            { x: width * 0.7, y: height * 0.45 }, // Landing 4
-            { x: width * 0.9, y: height * 0.35 }, // High Landing
-            { x: width * 1.2, y: height * 0.45 },
-            { x: width * 1.5, y: height * 0.55 },
-            { x: width * 1.8, y: height * 0.45 },
-            { x: width * 2.1, y: height * 0.35 },
-            { x: width * 2.5, y: height * 0.45 },
-            { x: width * 2.8, y: height * 0.55 },
+            // Section 1: Easy climb near start
+            { x: 180, y: groundY - 80 },
+            { x: 320, y: groundY - 160 },
+            { x: 480, y: groundY - 80 },
+            // Section 2: Mid-level platforming
+            { x: 650, y: groundY - 100 },
+            { x: 820, y: groundY - 180 },
+            { x: 1000, y: groundY - 100 },
+            // Section 3: Higher challenge
+            { x: 1200, y: groundY - 80 },
+            { x: 1380, y: groundY - 160 },
+            { x: 1560, y: groundY - 240 },
+            { x: 1750, y: groundY - 160 },
+            { x: 1920, y: groundY - 80 },
         ];
 
         floats.forEach(f => {
@@ -508,19 +514,20 @@ class GameScene extends Phaser.Scene {
     }
 
     createEnemies(width, height) {
-        // Spawn slimes on platforms with simple patrol logic
+        // Spawn slimes ON the ground or on platforms
+        const groundY = height - 20;
         const enemyData = [
-            { x: width * 0.75, y: height * 0.45, patrol: 100 },
-            { x: width * 1.1, y: height * 0.5, patrol: 80 },
-            { x: width * 1.5, y: height * 0.35, patrol: 90 },
-            { x: width * 2.3, y: height * 0.35, patrol: 100 }
+            { x: 500, y: groundY - 30, patrol: 80 },   // On ground
+            { x: 900, y: groundY - 30, patrol: 100 },  // On ground
+            { x: 320, y: groundY - 190, patrol: 60 },  // On platform
+            { x: 1380, y: groundY - 190, patrol: 80 }, // On platform
         ];
 
         enemyData.forEach(data => {
             const enemy = this.enemies.create(data.x, data.y, 'slime');
             enemy.setBounce(0);
             enemy.setCollideWorldBounds(false);
-            enemy.setVelocityX(80);
+            enemy.setVelocityX(60);
 
             // Store patrol bounds
             enemy.setData('startX', data.x);
@@ -531,10 +538,13 @@ class GameScene extends Phaser.Scene {
     hitEnemy(player, enemy) {
         if (this.isInvincible) return;
 
-        // Check if player is falling onto the enemy (kill mechanic)
-        if (player.body.velocity.y > 0 && player.y < enemy.y - 10) {
+        // Kill mechanic: player is above enemy and moving down
+        const playerBottom = player.y + player.body.height / 2;
+        const enemyTop = enemy.y - enemy.body.height / 2;
+
+        if (player.body.velocity.y > 0 && playerBottom < enemyTop + 15) {
             enemy.destroy();
-            player.setVelocityY(-350); // Bounce up
+            player.setVelocityY(-400); // Bounce up
             this.updateScore(100);
             this.playSound('stomp');
             return;
