@@ -20,7 +20,7 @@ class TitleScene extends Phaser.Scene {
         this.load.image('title_bg', 'assets/title_bg.jpg');
         this.load.image('bg_forest', 'assets/bg_forest.jpg');
         this.load.image('platform_tile', 'assets/platform_tile.png');
-        // Load character as atlas with JSON defining frame coordinates
+        // Load character sprite sheet with proper transparency
         this.load.atlas('noe_atlas', 'assets/noe_spritesheet.png', 'assets/noe_spritesheet.json');
     }
 
@@ -594,9 +594,9 @@ class GameScene extends Phaser.Scene {
         this.player.setBounce(0.1);
         this.player.setCollideWorldBounds(false);
 
-        // Hitbox for scaled character (~32x48 after scaling)
-        this.player.body.setSize(120, 220);
-        this.player.body.setOffset(22, 10);
+        // Hitbox for scaled character - adjusted to align feet with ground
+        this.player.body.setSize(100, 170);
+        this.player.body.setOffset(16, 50);
 
         // Create animations from atlas frames
         this.anims.create({

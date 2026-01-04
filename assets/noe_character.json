@@ -3,128 +3,128 @@
     "idle": {
       "frame": {
         "x": 71,
-        "y": 414,
-        "w": 102,
-        "h": 211
+        "y": 398,
+        "w": 103,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 102,
-        "h": 211
+        "w": 103,
+        "h": 228
       },
       "sourceSize": {
-        "w": 102,
-        "h": 211
+        "w": 103,
+        "h": 228
       }
     },
     "run1": {
       "frame": {
         "x": 196,
-        "y": 422,
-        "w": 140,
-        "h": 203
+        "y": 398,
+        "w": 138,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 140,
-        "h": 203
+        "w": 138,
+        "h": 228
       },
       "sourceSize": {
-        "w": 140,
-        "h": 203
+        "w": 138,
+        "h": 228
       }
     },
     "run2": {
       "frame": {
-        "x": 336,
-        "y": 422,
-        "w": 140,
-        "h": 203
+        "x": 353,
+        "y": 398,
+        "w": 145,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 140,
-        "h": 203
+        "w": 145,
+        "h": 228
       },
       "sourceSize": {
-        "w": 140,
-        "h": 203
+        "w": 145,
+        "h": 228
       }
     },
     "run3": {
       "frame": {
-        "x": 517,
-        "y": 420,
-        "w": 135,
-        "h": 205
+        "x": 516,
+        "y": 398,
+        "w": 132,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 135,
-        "h": 205
+        "w": 132,
+        "h": 228
       },
       "sourceSize": {
-        "w": 135,
-        "h": 205
+        "w": 132,
+        "h": 228
       }
     },
     "run4": {
       "frame": {
-        "x": 652,
-        "y": 420,
-        "w": 136,
-        "h": 205
+        "x": 662,
+        "y": 398,
+        "w": 142,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 136,
-        "h": 205
+        "w": 142,
+        "h": 228
       },
       "sourceSize": {
-        "w": 136,
-        "h": 205
+        "w": 142,
+        "h": 228
       }
     },
     "jump": {
       "frame": {
-        "x": 820,
-        "y": 399,
-        "w": 132,
-        "h": 221
+        "x": 819,
+        "y": 398,
+        "w": 134,
+        "h": 228
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 132,
-        "h": 221
+        "w": 134,
+        "h": 228
       },
       "sourceSize": {
-        "w": 132,
-        "h": 221
+        "w": 134,
+        "h": 228
       }
     }
   },
   "meta": {
     "app": "custom",
     "version": "1.0",
-    "image": "noe_spritesheet.png",
+    "image": "noe_character.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
