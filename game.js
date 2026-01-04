@@ -118,6 +118,13 @@ class GameScene extends Phaser.Scene {
         this.isInvincible = false;
         this.fallTimer = 0;
         this.highScore = parseInt(localStorage.getItem('superNoeHighScore') || '0');
+        // Checkpoint and finish line
+        this.checkpoint = null;
+        this.finishLine = null;
+        this.checkpointActivated = false;
+        this.respawnX = 100;
+        this.respawnY = 100;
+        this.levelComplete = false;
     }
 
     create() {
@@ -156,9 +163,12 @@ class GameScene extends Phaser.Scene {
         this.generateSpikeTexture();
         this.generateLavaTexture();
         this.generateBeeTexture();
+        this.generateCheckpointTexture();
+        this.generateFinishLineTexture();
 
         this.createHazards(width, height);
         this.createFlyingEnemies(width, height);
+        this.createCheckpointAndFinish(width, height);
 
         // Physics
         this.physics.add.collider(this.player, this.platforms);
@@ -732,8 +742,8 @@ class GameScene extends Phaser.Scene {
                 if (this.lives <= 0) {
                     this.scene.restart();
                 } else {
-                    // Respawn at start
-                    this.player.setPosition(100, 100);
+                    // Respawn at checkpoint or start
+                    this.player.setPosition(this.respawnX, this.respawnY);
                     this.player.setVelocity(0, 0);
                 }
             }
@@ -924,6 +934,245 @@ class GameScene extends Phaser.Scene {
 
         g.generateTexture('bee', w, h);
         g.destroy();
+    }
+
+    generateCheckpointTexture() {
+        const g = this.make.graphics();
+        const w = 40, h = 80;
+
+        // Pole
+        g.fillStyle(0x8b4513, 1);
+        g.fillRect(18, 10, 6, 70);
+
+        // Flag (inactive - grey)
+        g.fillStyle(0x888888, 1);
+        g.beginPath();
+        g.moveTo(24, 10);
+        g.lineTo(40, 25);
+        g.lineTo(24, 40);
+        g.closePath();
+        g.fillPath();
+
+        // Base
+        g.fillStyle(0x555555, 1);
+        g.fillRect(10, 70, 22, 10);
+
+        g.generateTexture('checkpoint_inactive', w, h);
+        g.destroy();
+
+        // Active checkpoint (green flag)
+        const g2 = this.make.graphics();
+
+        g2.fillStyle(0x8b4513, 1);
+        g2.fillRect(18, 10, 6, 70);
+
+        g2.fillStyle(0x00ff00, 1);
+        g2.beginPath();
+        g2.moveTo(24, 10);
+        g2.lineTo(40, 25);
+        g2.lineTo(24, 40);
+        g2.closePath();
+        g2.fillPath();
+
+        g2.fillStyle(0x80ff80, 1);
+        g2.beginPath();
+        g2.moveTo(24, 12);
+        g2.lineTo(34, 22);
+        g2.lineTo(24, 32);
+        g2.closePath();
+        g2.fillPath();
+
+        g2.fillStyle(0x555555, 1);
+        g2.fillRect(10, 70, 22, 10);
+
+        g2.generateTexture('checkpoint_active', w, h);
+        g2.destroy();
+    }
+
+    generateFinishLineTexture() {
+        const g = this.make.graphics();
+        const w = 60, h = 120;
+
+        // Left pole
+        g.fillStyle(0xffd700, 1);
+        g.fillRect(0, 0, 8, h);
+
+        // Right pole
+        g.fillRect(w - 8, 0, 8, h);
+
+        // Banner at top
+        g.fillStyle(0xff0000, 1);
+        g.fillRect(8, 10, w - 16, 30);
+
+        // Checkered pattern
+        g.fillStyle(0xffffff, 1);
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 3; j++) {
+                if ((i + j) % 2 === 0) {
+                    g.fillRect(8 + i * 11, 10 + j * 10, 11, 10);
+                }
+            }
+        }
+
+        // Star at top
+        g.fillStyle(0xffd700, 1);
+        g.fillCircle(w / 2, 25, 8);
+        g.fillStyle(0xffea00, 1);
+        g.fillCircle(w / 2, 25, 5);
+
+        g.generateTexture('finish_line', w, h);
+        g.destroy();
+    }
+
+    createCheckpointAndFinish(width, height) {
+        const groundY = height - 20;
+
+        // Checkpoint at middle of level
+        this.checkpoint = this.physics.add.sprite(width * 1.8, groundY - 50, 'checkpoint_inactive');
+        this.checkpoint.body.setAllowGravity(false);
+        this.checkpoint.body.setImmovable(true);
+        this.checkpoint.setOrigin(0.5, 1);
+
+        // Finish line near end
+        this.finishLine = this.physics.add.sprite(width * 3.5, groundY - 70, 'finish_line');
+        this.finishLine.body.setAllowGravity(false);
+        this.finishLine.body.setImmovable(true);
+        this.finishLine.setOrigin(0.5, 1);
+
+        // Floating animation
+        this.tweens.add({
+            targets: this.finishLine,
+            y: groundY - 75,
+            duration: 1500,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Collision detection
+        this.physics.add.overlap(this.player, this.checkpoint, this.activateCheckpoint, null, this);
+        this.physics.add.overlap(this.player, this.finishLine, this.reachFinish, null, this);
+    }
+
+    activateCheckpoint(player, checkpoint) {
+        if (this.checkpointActivated) return;
+
+        this.checkpointActivated = true;
+        this.respawnX = checkpoint.x;
+        this.respawnY = checkpoint.y - 40;
+
+        checkpoint.setTexture('checkpoint_active');
+
+        this.tweens.add({
+            targets: checkpoint,
+            scaleX: 1.3,
+            scaleY: 1.3,
+            duration: 200,
+            yoyo: true
+        });
+
+        this.playSound('coin');
+
+        const { width, height } = this.scale;
+        const text = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 3,
+            '✓ CHECKPOINT!',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '32px',
+                fill: '#00ff00',
+                stroke: '#000',
+                strokeThickness: 6
+            }
+        ).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 0,
+            y: text.y - 50,
+            duration: 1500,
+            onComplete: () => text.destroy()
+        });
+    }
+
+    reachFinish(player, finishLine) {
+        if (this.levelComplete) return;
+        this.levelComplete = true;
+
+        this.physics.pause();
+        player.anims.play('idle');
+
+        this.tweens.add({
+            targets: player,
+            y: player.y - 50,
+            duration: 500,
+            yoyo: true,
+            repeat: 2
+        });
+
+        this.playSound('coin');
+        this.time.delayedCall(200, () => this.playSound('coin'));
+        this.time.delayedCall(400, () => this.playSound('coin'));
+
+        const { width, height } = this.scale;
+
+        this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 2.5,
+            '🎉 LEVEL COMPLETE! 🎉',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '40px',
+                fill: '#ffd700',
+                stroke: '#000',
+                strokeThickness: 8
+            }
+        ).setOrigin(0.5);
+
+        this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 2,
+            'Final Score: ' + this.score,
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '28px',
+                fill: '#ffffff',
+                stroke: '#000',
+                strokeThickness: 4
+            }
+        ).setOrigin(0.5);
+
+        const restartText = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 1.6,
+            isMobile ? 'Tap to play again' : 'Press R to play again',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '20px',
+                fill: '#aaffaa',
+                stroke: '#000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: restartText,
+            alpha: 0.5,
+            duration: 700,
+            yoyo: true,
+            repeat: -1
+        });
+
+        this.time.delayedCall(1000, () => {
+            this.input.on('pointerdown', () => {
+                this.levelComplete = false;
+                this.checkpointActivated = false;
+                this.respawnX = 100;
+                this.respawnY = 100;
+                this.scene.restart();
+            });
+        });
     }
 
     createHazards(width, height) {
