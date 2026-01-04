@@ -20,7 +20,8 @@ class TitleScene extends Phaser.Scene {
         this.load.image('title_bg', 'assets/title_bg.jpg');
         this.load.image('bg_forest', 'assets/bg_forest.jpg');
         this.load.image('platform_tile', 'assets/platform_tile.png');
-        this.load.spritesheet('noe_spritesheet', 'assets/noe_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+        // Load character as atlas with JSON defining frame coordinates
+        this.load.atlas('noe_atlas', 'assets/noe_spritesheet.png', 'assets/noe_spritesheet.json');
     }
 
     create() {
@@ -122,8 +123,7 @@ class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // Generate animated character spritesheet
-        this.generateCharacterSpritesheet();
+        // Character spritesheet is loaded from assets/noe_spritesheet.png in preload
 
         // Generate platform texture
         this.generatePlatformTexture();
@@ -587,29 +587,31 @@ class GameScene extends Phaser.Scene {
     }
 
     createAnimatedPlayer(width, height) {
-        this.player = this.physics.add.sprite(100, height - 150, 'noe_spritesheet');
-        // No scale needed, 32x48 is perfect size (smaller than original)
+        // Create player using atlas frame
+        this.player = this.physics.add.sprite(100, height - 150, 'noe_atlas', 'idle');
+        // Scale down ~240px tall sprite to ~48px (0.2 scale)
+        this.player.setScale(0.2);
         this.player.setBounce(0.1);
         this.player.setCollideWorldBounds(false);
 
-        // Hitbox for new smaller character
-        this.player.body.setSize(20, 44);
-        this.player.body.setOffset(6, 4);
+        // Hitbox for scaled character (~32x48 after scaling)
+        this.player.body.setSize(120, 220);
+        this.player.body.setOffset(22, 10);
 
-        // Create animations from spritesheet (0: Idle, 1-2: Run, 3: Jump, 4-5: Run Alt)
+        // Create animations from atlas frames
         this.anims.create({
             key: 'idle',
-            frames: [{ key: 'noe_spritesheet', frame: 0 }],
+            frames: [{ key: 'noe_atlas', frame: 'idle' }],
             frameRate: 1
         });
 
         this.anims.create({
             key: 'run',
             frames: [
-                { key: 'noe_spritesheet', frame: 1 },
-                { key: 'noe_spritesheet', frame: 2 },
-                { key: 'noe_spritesheet', frame: 4 },
-                { key: 'noe_spritesheet', frame: 5 }
+                { key: 'noe_atlas', frame: 'run1' },
+                { key: 'noe_atlas', frame: 'run2' },
+                { key: 'noe_atlas', frame: 'run3' },
+                { key: 'noe_atlas', frame: 'run4' }
             ],
             frameRate: 10,
             repeat: -1
@@ -617,7 +619,7 @@ class GameScene extends Phaser.Scene {
 
         this.anims.create({
             key: 'jump',
-            frames: [{ key: 'noe_spritesheet', frame: 3 }],
+            frames: [{ key: 'noe_atlas', frame: 'jump' }],
             frameRate: 1
         });
 
@@ -625,10 +627,10 @@ class GameScene extends Phaser.Scene {
         this.anims.create({
             key: 'sprint',
             frames: [
-                { key: 'noe_spritesheet', frame: 1 },
-                { key: 'noe_spritesheet', frame: 2 },
-                { key: 'noe_spritesheet', frame: 4 },
-                { key: 'noe_spritesheet', frame: 5 }
+                { key: 'noe_atlas', frame: 'run1' },
+                { key: 'noe_atlas', frame: 'run2' },
+                { key: 'noe_atlas', frame: 'run3' },
+                { key: 'noe_atlas', frame: 'run4' }
             ],
             frameRate: 18,
             repeat: -1
