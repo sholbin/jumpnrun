@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3 uid="uid://coin_scene"]
+
+[ext_resource type="Script" path="res://scripts/coin.gd" id="1_coin"]
+
+[node name="Coin" type="Area2D"]
+collision_layer = 16
+collision_mask = 1
+script = ExtResource("1_coin")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+modulate = Color(1, 0.843, 0, 1)
+
+[node name="CollisionShape" type="CollisionShape2D" parent="."]
+
+[node name="SparkleParticles" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 8
+lifetime = 0.5
+one_shot = true
+explosiveness = 1.0

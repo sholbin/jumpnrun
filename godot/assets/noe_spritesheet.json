@@ -1,0 +1,135 @@
+{
+  "frames": {
+    "idle": {
+      "frame": {
+        "x": 71,
+        "y": 414,
+        "w": 102,
+        "h": 211
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 102,
+        "h": 211
+      },
+      "sourceSize": {
+        "w": 102,
+        "h": 211
+      }
+    },
+    "run1": {
+      "frame": {
+        "x": 196,
+        "y": 422,
+        "w": 140,
+        "h": 203
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 140,
+        "h": 203
+      },
+      "sourceSize": {
+        "w": 140,
+        "h": 203
+      }
+    },
+    "run2": {
+      "frame": {
+        "x": 336,
+        "y": 422,
+        "w": 140,
+        "h": 203
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 140,
+        "h": 203
+      },
+      "sourceSize": {
+        "w": 140,
+        "h": 203
+      }
+    },
+    "run3": {
+      "frame": {
+        "x": 517,
+        "y": 420,
+        "w": 135,
+        "h": 205
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 135,
+        "h": 205
+      },
+      "sourceSize": {
+        "w": 135,
+        "h": 205
+      }
+    },
+    "run4": {
+      "frame": {
+        "x": 652,
+        "y": 420,
+        "w": 136,
+        "h": 205
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 136,
+        "h": 205
+      },
+      "sourceSize": {
+        "w": 136,
+        "h": 205
+      }
+    },
+    "jump": {
+      "frame": {
+        "x": 820,
+        "y": 399,
+        "w": 132,
+        "h": 221
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 132,
+        "h": 221
+      },
+      "sourceSize": {
+        "w": 132,
+        "h": 221
+      }
+    }
+  },
+  "meta": {
+    "app": "custom",
+    "version": "1.0",
+    "image": "noe_spritesheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 1024,
+      "h": 1024
+    },
+    "scale": "1"
+  }
+}
