@@ -340,6 +340,11 @@ class GameScene extends Phaser.Scene {
         this.wasInAir = false;
         this.landSquashTween = null;
         this.lastYVelocity = 0;
+        // Mario-style jump physics
+        this.coyoteTime = 0; // Frames since leaving ground (allows late jumps)
+        this.jumpBufferTime = 0; // Frames since jump was pressed (allows early jumps)
+        this.isJumping = false; // Track if we're in a jump (for variable height)
+        this.jumpReleased = true; // Track if jump button was released
     }
 
     // Get current level data
@@ -1032,12 +1037,13 @@ class GameScene extends Phaser.Scene {
         this.player = this.physics.add.sprite(100, height - 150, 'noe_atlas', 'idle');
         // Scale down ~240px tall sprite to ~48px (0.2 scale)
         this.player.setScale(0.2);
-        this.player.setBounce(0.1);
+        this.player.setBounce(0); // No bounce - prevents double landing and ground instability
         this.player.setCollideWorldBounds(false);
 
-        // Hitbox for scaled character - adjusted to align feet with ground
-        this.player.body.setSize(100, 170);
-        this.player.body.setOffset(16, 50);
+        // Hitbox for scaled character - tighter box aligned with feet
+        // Original sprite ~130x240, we want a narrower hitbox centered on the body
+        this.player.body.setSize(80, 200);
+        this.player.body.setOffset(25, 40);
 
         // Create animations from atlas frames
         this.anims.create({
@@ -1363,6 +1369,15 @@ class GameScene extends Phaser.Scene {
             e.preventDefault();
             this.doJump();
         });
+        this.jumpButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            this.jumpReleased = true;
+            // Variable jump height on mobile - cut velocity if released early
+            if (this.isJumping && this.player.body.velocity.y < -200) {
+                this.player.setVelocityY(this.player.body.velocity.y * 0.5);
+                this.isJumping = false;
+            }
+        });
 
         // Create sprint button
         this.sprintButton = document.createElement('div');
@@ -1396,16 +1411,23 @@ class GameScene extends Phaser.Scene {
     }
 
     doJump() {
-        if (this.player.body.touching.down) {
+        // Can jump if on ground OR within coyote time (just left ground)
+        const canJump = this.player.body.touching.down || this.coyoteTime > 0;
+
+        if (canJump && this.jumpReleased) {
             // Sprint jump: higher and more horizontal momentum
             if (this.isSprinting) {
-                this.player.setVelocityY(-600); // Higher jump
+                this.player.setVelocityY(-650); // Higher jump
                 // Boost horizontal velocity in sprint direction
                 const boostDir = this.lastDirection === 'right' ? 1 : -1;
-                this.player.setVelocityX(this.player.body.velocity.x + boostDir * 80);
+                this.player.setVelocityX(this.player.body.velocity.x + boostDir * 100);
             } else {
-                this.player.setVelocityY(-520); // Normal jump
+                this.player.setVelocityY(-580); // Normal jump - snappier
             }
+            this.isJumping = true;
+            this.jumpReleased = false;
+            this.coyoteTime = 0; // Used up coyote time
+            this.jumpBufferTime = 0;
             this.playSound('jump');
         }
     }
@@ -1528,9 +1550,56 @@ class GameScene extends Phaser.Scene {
                 }
             }
 
-            if (this.spaceKey.isDown && isOnGround) {
-                this.player.setVelocityY(-520);
+            // PC jump with Mario physics
+            if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+                this.jumpBufferTime = 6; // Buffer jump input for 6 frames
             }
+            if (this.jumpBufferTime > 0 && (isOnGround || this.coyoteTime > 0) && this.jumpReleased) {
+                // Sprint jump: higher and more horizontal momentum
+                if (this.isSprinting) {
+                    this.player.setVelocityY(-650);
+                    const boostDir = this.lastDirection === 'right' ? 1 : -1;
+                    this.player.setVelocityX(this.player.body.velocity.x + boostDir * 100);
+                } else {
+                    this.player.setVelocityY(-580);
+                }
+                this.isJumping = true;
+                this.jumpReleased = false;
+                this.coyoteTime = 0;
+                this.jumpBufferTime = 0;
+                this.playSound('jump');
+            }
+        }
+
+        // Mario physics: Track coyote time (can jump shortly after leaving platform)
+        if (isOnGround) {
+            this.coyoteTime = 8; // 8 frames of coyote time
+            this.isJumping = false;
+        } else {
+            this.coyoteTime = Math.max(0, this.coyoteTime - 1);
+        }
+
+        // Track jump button release
+        if (!this.spaceKey.isDown && !this.isMobile) {
+            this.jumpReleased = true;
+        }
+
+        // Decrement jump buffer
+        this.jumpBufferTime = Math.max(0, this.jumpBufferTime - 1);
+
+        // Mario physics: Variable jump height - cut velocity when releasing early
+        if (this.isJumping && !this.spaceKey.isDown && this.player.body.velocity.y < -200) {
+            this.player.setVelocityY(this.player.body.velocity.y * 0.5); // Cut upward velocity
+            this.isJumping = false;
+        }
+
+        // Mario physics: Faster falling (higher gravity when going down)
+        if (this.player.body.velocity.y > 0) {
+            // Falling - apply extra gravity for snappier feel
+            this.player.body.velocity.y += 40;
+        } else if (this.player.body.velocity.y < 0 && !this.spaceKey.isDown) {
+            // Rising but not holding jump - fall faster
+            this.player.body.velocity.y += 25;
         }
 
         // Flip sprite
@@ -1563,7 +1632,7 @@ class GameScene extends Phaser.Scene {
 
         // Polish: Landing detection - only trigger when actually landing from a fall/jump
         // wasInAir must be true AND we must have had significant downward velocity
-        if (isOnGround && this.wasInAir && this.lastYVelocity > 50) {
+        if (isOnGround && this.wasInAir && this.lastYVelocity > 100) {
             // Just landed from a real jump/fall!
             this.emitDust(this.player.x, this.player.y + 15, 6);
             this.squashPlayer();
