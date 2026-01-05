@@ -2,10 +2,210 @@
 // SUPER NOE WORLD - Main Game File
 // ============================================
 
-// --- Global State ---
-let isMobile = false;
-let joystick = null;
-let joystickData = { x: 0, y: 0 };
+// --- Configuration Constants ---
+const CONFIG = {
+    player: {
+        normalSpeed: 220,
+        sprintSpeed: 400,
+        jumpVelocity: -520,
+        sprintJumpVelocity: -600,
+        sprintJumpBoost: 80,
+        airDrag: 0.92,
+        airControl: 0.6,
+        invincibilityDuration: 1500,
+        fallDeathTime: 2000
+    },
+    physics: {
+        gravity: 1000,
+        bounce: 0.1
+    },
+    enemy: {
+        slimeSpeed: 60,
+        slimeReverseSpeed: 80
+    },
+    scoring: {
+        coin: 10,
+        enemyStomp: 100
+    }
+};
+
+// --- Level Data ---
+// All positions are multipliers of screen dimensions for responsive design
+// groundY is calculated as height - 20 in the game
+const LEVELS = [
+    // Level 1: Introduction - Learn the basics
+    {
+        name: "Green Meadows",
+        worldLength: 4, // multiplier of screen width
+        lavaPositions: [1.2, 2.0, 3.0],
+        // Floating platforms: x and y are offsets from groundY
+        platforms: [
+            { x: 180, yOffset: 80 },
+            { x: 320, yOffset: 160 },
+            { x: 480, yOffset: 80 },
+            { x: 650, yOffset: 100 },
+            { x: 820, yOffset: 180 },
+            { x: 1000, yOffset: 100 },
+            { x: 1200, yOffset: 80 },
+            { x: 1380, yOffset: 160 },
+            { x: 1560, yOffset: 240 },
+            { x: 1750, yOffset: 160 },
+            { x: 1920, yOffset: 80 }
+        ],
+        // Ground enemies with patrol ranges
+        enemies: [
+            { x: 500, yOffset: 30, patrol: 80 },
+            { x: 900, yOffset: 30, patrol: 100 },
+            { x: 320, yOffset: 190, patrol: 60 },
+            { x: 1380, yOffset: 190, patrol: 80 }
+        ],
+        // Flying enemies
+        flyingEnemies: [
+            { xMult: 1.3, yMult: 0.3, range: 200 },
+            { xMult: 2.0, yMult: 0.25, range: 150 }
+        ],
+        // Coins: x/y as multipliers of screen dimensions
+        coins: [
+            { xMult: 0.4, yMult: 0.53 },
+            { xMult: 0.43, yMult: 0.53 },
+            { xMult: 0.75, yMult: 0.43 },
+            { xMult: 0.78, yMult: 0.43 },
+            { xMult: 0.15, yMult: 0.31 },
+            { xMult: 1.1, yMult: 0.48 },
+            { xMult: 1.5, yMult: 0.33 },
+            { xMult: 1.9, yMult: 0.43 },
+            { xMult: 2.3, yMult: 0.35 },
+            { xMult: 0.6, ground: true },
+            { xMult: 0.8, ground: true },
+            { xMult: 1.0, ground: true }
+        ],
+        // Spikes as multipliers of screen width
+        spikes: [0.8, 1.5, 2.5],
+        // Checkpoint and finish positions
+        checkpoint: { xMult: 1.8 },
+        finish: { xMult: 3.5 }
+    },
+    // Level 2: Rising Challenge
+    {
+        name: "Rocky Heights",
+        worldLength: 5,
+        lavaPositions: [1.0, 1.8, 2.6, 3.6],
+        platforms: [
+            { x: 200, yOffset: 80 },
+            { x: 380, yOffset: 160 },
+            { x: 560, yOffset: 100 },
+            { x: 750, yOffset: 180 },
+            { x: 950, yOffset: 120 },
+            { x: 1150, yOffset: 200 },
+            { x: 1350, yOffset: 140 },
+            { x: 1550, yOffset: 220 },
+            { x: 1750, yOffset: 160 },
+            { x: 1950, yOffset: 100 },
+            { x: 2150, yOffset: 180 },
+            { x: 2350, yOffset: 120 },
+            { x: 2550, yOffset: 200 }
+        ],
+        enemies: [
+            { x: 400, yOffset: 30, patrol: 100 },
+            { x: 800, yOffset: 30, patrol: 120 },
+            { x: 1200, yOffset: 30, patrol: 80 },
+            { x: 380, yOffset: 190, patrol: 70 },
+            { x: 1150, yOffset: 230, patrol: 90 },
+            { x: 1950, yOffset: 130, patrol: 60 }
+        ],
+        flyingEnemies: [
+            { xMult: 0.9, yMult: 0.25, range: 180 },
+            { xMult: 1.5, yMult: 0.3, range: 220 },
+            { xMult: 2.2, yMult: 0.2, range: 160 }
+        ],
+        coins: [
+            { xMult: 0.3, yMult: 0.5 },
+            { xMult: 0.5, yMult: 0.4 },
+            { xMult: 0.7, yMult: 0.35 },
+            { xMult: 0.95, yMult: 0.45 },
+            { xMult: 1.2, yMult: 0.3 },
+            { xMult: 1.45, yMult: 0.4 },
+            { xMult: 1.7, yMult: 0.35 },
+            { xMult: 2.0, yMult: 0.45 },
+            { xMult: 2.3, yMult: 0.3 },
+            { xMult: 2.6, yMult: 0.4 },
+            { xMult: 0.55, ground: true },
+            { xMult: 1.35, ground: true },
+            { xMult: 2.15, ground: true }
+        ],
+        spikes: [0.6, 1.1, 1.6, 2.1, 2.8],
+        checkpoint: { xMult: 2.2 },
+        finish: { xMult: 4.5 }
+    },
+    // Level 3: Expert Challenge
+    {
+        name: "Danger Peak",
+        worldLength: 6,
+        lavaPositions: [0.8, 1.4, 2.0, 2.8, 3.6, 4.4],
+        platforms: [
+            { x: 150, yOffset: 100 },
+            { x: 300, yOffset: 180 },
+            { x: 480, yOffset: 120 },
+            { x: 650, yOffset: 200 },
+            { x: 850, yOffset: 140 },
+            { x: 1050, yOffset: 220 },
+            { x: 1250, yOffset: 160 },
+            { x: 1450, yOffset: 240 },
+            { x: 1650, yOffset: 180 },
+            { x: 1850, yOffset: 120 },
+            { x: 2050, yOffset: 200 },
+            { x: 2250, yOffset: 140 },
+            { x: 2450, yOffset: 220 },
+            { x: 2650, yOffset: 160 },
+            { x: 2850, yOffset: 100 },
+            { x: 3050, yOffset: 180 }
+        ],
+        enemies: [
+            { x: 350, yOffset: 30, patrol: 80 },
+            { x: 700, yOffset: 30, patrol: 100 },
+            { x: 1100, yOffset: 30, patrol: 90 },
+            { x: 1500, yOffset: 30, patrol: 110 },
+            { x: 1900, yOffset: 30, patrol: 85 },
+            { x: 2300, yOffset: 30, patrol: 95 },
+            { x: 300, yOffset: 210, patrol: 50 },
+            { x: 1050, yOffset: 250, patrol: 60 },
+            { x: 1850, yOffset: 150, patrol: 55 },
+            { x: 2650, yOffset: 190, patrol: 65 }
+        ],
+        flyingEnemies: [
+            { xMult: 0.6, yMult: 0.2, range: 200 },
+            { xMult: 1.1, yMult: 0.25, range: 180 },
+            { xMult: 1.6, yMult: 0.2, range: 220 },
+            { xMult: 2.2, yMult: 0.3, range: 190 },
+            { xMult: 2.8, yMult: 0.25, range: 210 }
+        ],
+        coins: [
+            { xMult: 0.25, yMult: 0.45 },
+            { xMult: 0.45, yMult: 0.35 },
+            { xMult: 0.65, yMult: 0.4 },
+            { xMult: 0.85, yMult: 0.3 },
+            { xMult: 1.05, yMult: 0.45 },
+            { xMult: 1.25, yMult: 0.35 },
+            { xMult: 1.5, yMult: 0.4 },
+            { xMult: 1.75, yMult: 0.3 },
+            { xMult: 2.0, yMult: 0.45 },
+            { xMult: 2.25, yMult: 0.35 },
+            { xMult: 2.5, yMult: 0.4 },
+            { xMult: 2.75, yMult: 0.3 },
+            { xMult: 3.0, yMult: 0.45 },
+            { xMult: 0.5, ground: true },
+            { xMult: 1.2, ground: true },
+            { xMult: 2.4, ground: true },
+            { xMult: 3.2, ground: true }
+        ],
+        spikes: [0.5, 0.9, 1.3, 1.7, 2.2, 2.6, 3.0, 3.4, 4.0],
+        checkpoint: { xMult: 2.8 },
+        finish: { xMult: 5.5 }
+    }
+];
+
+// Note: isMobile is stored in game registry for cross-scene access
+// joystick and joystickData are now GameScene properties
 
 // ============================================
 // TITLE SCENE
@@ -19,14 +219,14 @@ class TitleScene extends Phaser.Scene {
         // Load assets
         this.load.image('title_bg', 'assets/title_bg.jpg');
         this.load.image('bg_forest', 'assets/bg_forest.jpg');
-        this.load.image('platform_tile', 'assets/platform_tile.png');
         // Load character sprite sheet with proper transparency
         this.load.atlas('noe_atlas', 'assets/noe_spritesheet.png', 'assets/noe_spritesheet.json');
     }
 
     create() {
         const { width, height } = this.scale;
-        isMobile = !this.sys.game.device.os.desktop;
+        // Store isMobile in registry for cross-scene access
+        this.registry.set('isMobile', !this.sys.game.device.os.desktop);
 
         // Use the pixely forest background for title screen
         if (this.textures.exists('title_bg')) {
@@ -70,6 +270,7 @@ class TitleScene extends Phaser.Scene {
             strokeThickness: 4
         };
 
+        const isMobile = this.registry.get('isMobile');
         const promptText = isMobile ? 'Tap anywhere to start' : 'Press any key to start';
         this.promptText = this.add.text(width / 2, height * 0.5, promptText, subtitleStyle).setOrigin(0.5);
 
@@ -113,11 +314,14 @@ class GameScene extends Phaser.Scene {
         this.score = 0;
         this.livesText = null;
         this.scoreText = null;
+        this.levelText = null;
         this.coins = null;
         this.soundContext = null;
         this.isInvincible = false;
         this.fallTimer = 0;
         this.highScore = parseInt(localStorage.getItem('superNoeHighScore') || '0');
+        // Level tracking
+        this.currentLevel = parseInt(localStorage.getItem('superNoeCurrentLevel') || '0');
         // Checkpoint and finish line
         this.checkpoint = null;
         this.finishLine = null;
@@ -125,14 +329,29 @@ class GameScene extends Phaser.Scene {
         this.respawnX = 100;
         this.respawnY = 100;
         this.levelComplete = false;
+        // Pause state
+        this.isPaused = false;
+        this.pauseMenu = null;
+        // Mobile state
+        this.isMobile = false;
+        this.joystick = null;
+        this.joystickData = { x: 0, y: 0 };
         // Polish: state tracking
         this.wasInAir = false;
         this.landSquashTween = null;
         this.lastYVelocity = 0;
     }
 
+    // Get current level data
+    getLevelData() {
+        return LEVELS[this.currentLevel] || LEVELS[0];
+    }
+
     create() {
         const { width, height } = this.scale;
+
+        // Get mobile state from registry
+        this.isMobile = this.registry.get('isMobile') || false;
 
         // Character spritesheet is loaded from assets/noe_spritesheet.png in preload
 
@@ -188,11 +407,13 @@ class GameScene extends Phaser.Scene {
         this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+        this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+        this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
         // UI
         this.createUI();
 
-        if (isMobile) {
+        if (this.isMobile) {
             this.setupMobileControls();
         }
 
@@ -206,7 +427,52 @@ class GameScene extends Phaser.Scene {
             0xffffff
         ).setScrollFactor(0).setAlpha(0).setDepth(1000);
 
-        this.scale.on('resize', () => this.scene.restart());
+        // Handle resize by saving state and restoring after restart
+        this.scale.on('resize', () => {
+            this.saveGameState();
+            this.scene.restart();
+        });
+
+        // Restore state if we have saved data from a resize
+        this.restoreGameState();
+    }
+
+    saveGameState() {
+        this.registry.set('savedState', {
+            score: this.score,
+            lives: this.lives,
+            currentLevel: this.currentLevel,
+            checkpointActivated: this.checkpointActivated,
+            respawnX: this.respawnX,
+            respawnY: this.respawnY,
+            playerX: this.player ? this.player.x : 100,
+            playerY: this.player ? this.player.y : 100
+        });
+    }
+
+    restoreGameState() {
+        const saved = this.registry.get('savedState');
+        if (saved) {
+            this.score = saved.score;
+            this.lives = saved.lives;
+            this.currentLevel = saved.currentLevel;
+            this.checkpointActivated = saved.checkpointActivated;
+            this.respawnX = saved.respawnX;
+            this.respawnY = saved.respawnY;
+            // Move player to saved position after a short delay to ensure physics is ready
+            this.time.delayedCall(50, () => {
+                if (this.player) {
+                    this.player.setPosition(saved.playerX, saved.playerY);
+                }
+                this.updateUI();
+                // Update checkpoint visual if it was activated
+                if (this.checkpointActivated && this.checkpoint) {
+                    this.checkpoint.setTexture('checkpoint_active');
+                }
+            });
+            // Clear saved state after restoring
+            this.registry.remove('savedState');
+        }
     }
 
     // Programmatic sprite generation removed - using asset/noe_spritesheet.png
@@ -314,45 +580,25 @@ class GameScene extends Phaser.Scene {
     }
 
     createPlatforms(width, height) {
-        // Always use the clean procedural platform
+        const level = this.getLevelData();
         const platformKey = 'grass_platform';
         const tileWidth = 80;
-
-        // Ground - seamless tiling with lava pits
         const groundY = height - 20;
-        // These positions must match the lava pit positions in createHazards!
-        const lavaX = [width * 1.2, width * 2.0, width * 3.0];
 
-        for (let x = -100; x < width * 4; x += tileWidth - 1) {
-            // Check if this X is in a lava pit area
+        // Ground - seamless tiling with lava pits (using level data)
+        const lavaX = level.lavaPositions.map(mult => width * mult);
+        const worldEnd = width * level.worldLength;
+
+        for (let x = -100; x < worldEnd; x += tileWidth - 1) {
             const isInLava = lavaX.some(lx => Math.abs(x - lx) < 60);
             if (!isInLava) {
                 this.platforms.create(x, groundY, platformKey);
             }
         }
 
-        // Floating platforms - Use fixed pixel heights from ground for reliable jumps
-        // Max jump height is ~130px, so each step should be ~80-100px apart vertically
-        // groundY is already defined above
-        const floats = [
-            // Section 1: Easy climb near start
-            { x: 180, y: groundY - 80 },
-            { x: 320, y: groundY - 160 },
-            { x: 480, y: groundY - 80 },
-            // Section 2: Mid-level platforming
-            { x: 650, y: groundY - 100 },
-            { x: 820, y: groundY - 180 },
-            { x: 1000, y: groundY - 100 },
-            // Section 3: Higher challenge
-            { x: 1200, y: groundY - 80 },
-            { x: 1380, y: groundY - 160 },
-            { x: 1560, y: groundY - 240 },
-            { x: 1750, y: groundY - 160 },
-            { x: 1920, y: groundY - 80 },
-        ];
-
-        floats.forEach(f => {
-            this.platforms.create(f.x, f.y, platformKey);
+        // Floating platforms from level data
+        level.platforms.forEach(p => {
+            this.platforms.create(p.x, groundY - p.yOffset, platformKey);
         });
     }
 
@@ -382,22 +628,15 @@ class GameScene extends Phaser.Scene {
     }
 
     createEnemies(width, height) {
-        // Spawn slimes ON the ground or on platforms
+        const level = this.getLevelData();
         const groundY = height - 20;
-        const enemyData = [
-            { x: 500, y: groundY - 30, patrol: 80 },   // On ground
-            { x: 900, y: groundY - 30, patrol: 100 },  // On ground
-            { x: 320, y: groundY - 190, patrol: 60 },  // On platform
-            { x: 1380, y: groundY - 190, patrol: 80 }, // On platform
-        ];
 
-        enemyData.forEach(data => {
-            const enemy = this.enemies.create(data.x, data.y, 'slime');
+        // Spawn enemies from level data
+        level.enemies.forEach(data => {
+            const enemy = this.enemies.create(data.x, groundY - data.yOffset, 'slime');
             enemy.setBounce(0);
             enemy.setCollideWorldBounds(false);
-            enemy.setVelocityX(60);
-
-            // Store patrol bounds
+            enemy.setVelocityX(CONFIG.enemy.slimeSpeed);
             enemy.setData('startX', data.x);
             enemy.setData('patrolDist', data.patrol);
         });
@@ -469,6 +708,7 @@ class GameScene extends Phaser.Scene {
     }
 
     createUI() {
+        const level = this.getLevelData();
         const textStyle = {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '24px',
@@ -479,11 +719,20 @@ class GameScene extends Phaser.Scene {
 
         this.scoreText = this.add.text(20, 20, 'Score: 0', textStyle).setScrollFactor(0);
         this.livesText = this.add.text(20, 50, 'Lives: ❤️❤️❤️', textStyle).setScrollFactor(0);
+
+        // Level indicator (top right)
+        const { width } = this.scale;
+        this.levelText = this.add.text(width - 20, 20, `Level ${this.currentLevel + 1}: ${level.name}`, {
+            ...textStyle,
+            fontSize: '20px',
+            fill: '#88ff88'
+        }).setScrollFactor(0).setOrigin(1, 0);
+
         this.highScoreText = this.add.text(20, 110, `High: ${this.highScore}`, { ...textStyle, fontSize: '18px', fill: '#ffd700' }).setScrollFactor(0);
 
         // PC Hint
-        if (!isMobile) {
-            this.add.text(20, 80, '[R] to Reset', { ...textStyle, fontSize: '14px', fill: '#aaa' }).setScrollFactor(0);
+        if (!this.isMobile) {
+            this.add.text(20, 80, '[R] Reset  [P] Pause', { ...textStyle, fontSize: '14px', fill: '#aaa' }).setScrollFactor(0);
         }
 
         this.updateUI();
@@ -496,6 +745,10 @@ class GameScene extends Phaser.Scene {
             for (let i = 0; i < this.lives; i++) hearts += '❤️';
             this.livesText.setText(`Lives: ${hearts}`);
         }
+        if (this.levelText) {
+            const level = this.getLevelData();
+            this.levelText.setText(`Level ${this.currentLevel + 1}: ${level.name}`);
+        }
     }
 
     updateScore(amount) {
@@ -506,6 +759,115 @@ class GameScene extends Phaser.Scene {
             localStorage.setItem('superNoeHighScore', this.highScore.toString());
         }
         this.updateUI();
+    }
+
+    // ============================================
+    // PAUSE MENU
+    // ============================================
+    togglePause() {
+        if (this.levelComplete) return; // Don't pause during level complete
+
+        if (this.isPaused) {
+            this.resumeGame();
+        } else {
+            this.pauseGame();
+        }
+    }
+
+    pauseGame() {
+        this.isPaused = true;
+        this.physics.pause();
+
+        const { width, height } = this.scale;
+        const centerX = this.cameras.main.scrollX + width / 2;
+        const centerY = this.cameras.main.scrollY + height / 2;
+
+        // Create pause menu container
+        this.pauseMenu = this.add.container(centerX, centerY);
+
+        // Dark overlay
+        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.7);
+        overlay.setScrollFactor(0);
+        this.pauseMenu.add(overlay);
+
+        // Pause title
+        const pauseTitle = this.add.text(0, -100, 'PAUSED', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '48px',
+            fill: '#ffffff',
+            stroke: '#000',
+            strokeThickness: 6
+        }).setOrigin(0.5);
+        this.pauseMenu.add(pauseTitle);
+
+        // Menu buttons
+        const buttonStyle = {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '28px',
+            fill: '#ffffff',
+            stroke: '#000',
+            strokeThickness: 4,
+            backgroundColor: '#444444',
+            padding: { x: 20, y: 10 }
+        };
+
+        // Resume button
+        const resumeBtn = this.add.text(0, -20, '  Resume  ', buttonStyle)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerover', () => resumeBtn.setStyle({ fill: '#88ff88' }))
+            .on('pointerout', () => resumeBtn.setStyle({ fill: '#ffffff' }))
+            .on('pointerdown', () => this.resumeGame());
+        this.pauseMenu.add(resumeBtn);
+
+        // Restart Level button
+        const restartBtn = this.add.text(0, 40, 'Restart Level', buttonStyle)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerover', () => restartBtn.setStyle({ fill: '#ffff88' }))
+            .on('pointerout', () => restartBtn.setStyle({ fill: '#ffffff' }))
+            .on('pointerdown', () => {
+                this.isPaused = false;
+                this.checkpointActivated = false;
+                this.respawnX = 100;
+                this.respawnY = 100;
+                this.scene.restart();
+            });
+        this.pauseMenu.add(restartBtn);
+
+        // Back to Title button
+        const titleBtn = this.add.text(0, 100, ' Main Menu ', buttonStyle)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerover', () => titleBtn.setStyle({ fill: '#ff8888' }))
+            .on('pointerout', () => titleBtn.setStyle({ fill: '#ffffff' }))
+            .on('pointerdown', () => {
+                this.isPaused = false;
+                this.scene.start('TitleScene');
+            });
+        this.pauseMenu.add(titleBtn);
+
+        // Hint text
+        const hintText = this.isMobile ? 'Tap Resume to continue' : 'Press P or ESC to resume';
+        const hint = this.add.text(0, 160, hintText, {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '16px',
+            fill: '#aaaaaa'
+        }).setOrigin(0.5);
+        this.pauseMenu.add(hint);
+
+        this.pauseMenu.setDepth(2000);
+        this.pauseMenu.setScrollFactor(0);
+    }
+
+    resumeGame() {
+        this.isPaused = false;
+        this.physics.resume();
+
+        if (this.pauseMenu) {
+            this.pauseMenu.destroy();
+            this.pauseMenu = null;
+        }
     }
 
     generateCoinTexture() {
@@ -529,30 +891,20 @@ class GameScene extends Phaser.Scene {
     }
 
     createCoins(width, height) {
-        // Add some coins above platforms
-        const coinPositions = [
-            { x: width * 0.4, y: height * 0.53 },
-            { x: width * 0.43, y: height * 0.53 },
-            { x: width * 0.75, y: height * 0.43 },
-            { x: width * 0.78, y: height * 0.43 },
-            { x: width * 0.15, y: height * 0.31 },
-            { x: width * 1.1, y: height * 0.48 },
-            { x: width * 1.5, y: height * 0.33 },
-            { x: width * 1.9, y: height * 0.43 },
-            { x: width * 2.3, y: height * 0.35 },
-            { x: width * 0.6, y: height - 60 },
-            { x: width * 0.8, y: height - 60 },
-            { x: width * 1.0, y: height - 60 },
-        ];
+        const level = this.getLevelData();
 
-        coinPositions.forEach(pos => {
-            const coin = this.coins.create(pos.x, pos.y, 'coin');
-            coin.body.setAllowGravity(false); // Make coins float!
+        // Create coins from level data
+        level.coins.forEach(coinData => {
+            const x = width * coinData.xMult;
+            const y = coinData.ground ? height - 60 : height * coinData.yMult;
+
+            const coin = this.coins.create(x, y, 'coin');
+            coin.body.setAllowGravity(false);
 
             // Add floating animation
             this.tweens.add({
                 targets: coin,
-                y: pos.y - 10,
+                y: y - 10,
                 duration: 1000 + Math.random() * 500,
                 yoyo: true,
                 repeat: -1,
@@ -729,7 +1081,9 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
         this.cameras.main.setDeadzone(120, 80);
 
-        this.physics.world.setBounds(-200, 0, width * 4, height);
+        // World bounds based on level length
+        const level = this.getLevelData();
+        this.physics.world.setBounds(-200, 0, width * level.worldLength, height);
     }
 
     // ============================================
@@ -979,7 +1333,7 @@ class GameScene extends Phaser.Scene {
         joystickContainer.id = 'joystick-zone';
         document.body.appendChild(joystickContainer);
 
-        joystick = nipplejs.create({
+        this.joystick = nipplejs.create({
             zone: joystickContainer,
             mode: 'static',
             position: { left: '80px', bottom: '80px' },
@@ -987,16 +1341,16 @@ class GameScene extends Phaser.Scene {
             size: 120
         });
 
-        joystick.on('move', (evt, data) => {
+        this.joystick.on('move', (evt, data) => {
             if (data.vector) {
-                joystickData.x = data.vector.x;
-                joystickData.y = data.vector.y;
+                this.joystickData.x = data.vector.x;
+                this.joystickData.y = data.vector.y;
             }
         });
 
-        joystick.on('end', () => {
-            joystickData.x = 0;
-            joystickData.y = 0;
+        this.joystick.on('end', () => {
+            this.joystickData.x = 0;
+            this.joystickData.y = 0;
         });
 
         this.jumpButton = document.createElement('div');
@@ -1020,10 +1374,24 @@ class GameScene extends Phaser.Scene {
         this.sprintButton.addEventListener('touchstart', (e) => {
             e.preventDefault();
             this.isSprinting = true;
+            this.sprintButton.classList.add('active');
         });
         this.sprintButton.addEventListener('touchend', (e) => {
             e.preventDefault();
             this.isSprinting = false;
+            this.sprintButton.classList.remove('active');
+        });
+
+        // Create pause button (top right)
+        this.pauseButton = document.createElement('div');
+        this.pauseButton.className = 'pause-button';
+        this.pauseButton.innerHTML = '⏸';
+        this.pauseButton.id = 'pause-btn';
+        document.body.appendChild(this.pauseButton);
+
+        this.pauseButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.togglePause();
         });
     }
 
@@ -1043,6 +1411,16 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
+        // Pause toggle (P or ESC key)
+        if ((this.pKey && Phaser.Input.Keyboard.JustDown(this.pKey)) ||
+            (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey))) {
+            this.togglePause();
+            return;
+        }
+
+        // Don't process game logic while paused
+        if (this.isPaused) return;
+
         // Restart shortcut (PC) - Check this first to ensure responsiveness
         if (this.rKey && Phaser.Input.Keyboard.JustDown(this.rKey)) {
             this.lives = 3;
@@ -1076,7 +1454,7 @@ class GameScene extends Phaser.Scene {
         let isMoving = false;
 
         // Check sprint state (PC: SHIFT key)
-        if (!isMobile) {
+        if (!this.isMobile) {
             this.isSprinting = this.shiftKey.isDown;
         }
 
@@ -1092,8 +1470,8 @@ class GameScene extends Phaser.Scene {
         const airDrag = 0.92; // How much velocity is retained each frame in air (lower = slows faster)
         const airControl = 0.6; // Control while in air (higher = easier to change direction)
 
-        if (isMobile) {
-            if (joystickData.x < -0.3) {
+        if (this.isMobile) {
+            if (this.joystickData.x < -0.3) {
                 if (isOnGround) {
                     this.player.setVelocityX(-speed);
                 } else {
@@ -1102,7 +1480,7 @@ class GameScene extends Phaser.Scene {
                 }
                 isMoving = true;
                 this.lastDirection = 'left';
-            } else if (joystickData.x > 0.3) {
+            } else if (this.joystickData.x > 0.3) {
                 if (isOnGround) {
                     this.player.setVelocityX(speed);
                 } else {
@@ -1227,12 +1605,14 @@ class GameScene extends Phaser.Scene {
         const joystickZone = document.getElementById('joystick-zone');
         const jumpBtn = document.getElementById('jump-btn');
         const sprintBtn = document.getElementById('sprint-btn');
+        const pauseBtn = document.getElementById('pause-btn');
         if (joystickZone) joystickZone.remove();
         if (jumpBtn) jumpBtn.remove();
         if (sprintBtn) sprintBtn.remove();
-        if (joystick) {
-            joystick.destroy();
-            joystick = null;
+        if (pauseBtn) pauseBtn.remove();
+        if (this.joystick) {
+            this.joystick.destroy();
+            this.joystick = null;
         }
     }
 
@@ -1374,16 +1754,17 @@ class GameScene extends Phaser.Scene {
     }
 
     createCheckpointAndFinish(width, height) {
+        const level = this.getLevelData();
         const groundY = height - 20;
 
-        // Checkpoint at middle of level
-        this.checkpoint = this.physics.add.sprite(width * 1.8, groundY - 50, 'checkpoint_inactive');
+        // Checkpoint from level data
+        this.checkpoint = this.physics.add.sprite(width * level.checkpoint.xMult, groundY - 50, 'checkpoint_inactive');
         this.checkpoint.body.setAllowGravity(false);
         this.checkpoint.body.setImmovable(true);
         this.checkpoint.setOrigin(0.5, 1);
 
-        // Finish line near end
-        this.finishLine = this.physics.add.sprite(width * 3.5, groundY - 70, 'finish_line');
+        // Finish line from level data
+        this.finishLine = this.physics.add.sprite(width * level.finish.xMult, groundY - 70, 'finish_line');
         this.finishLine.body.setAllowGravity(false);
         this.finishLine.body.setImmovable(true);
         this.finishLine.setOrigin(0.5, 1);
@@ -1474,11 +1855,14 @@ class GameScene extends Phaser.Scene {
         });
 
         const { width, height } = this.scale;
+        const isLastLevel = this.currentLevel >= LEVELS.length - 1;
 
+        // Title text
+        const titleText = isLastLevel ? 'YOU WIN!' : 'LEVEL COMPLETE!';
         this.add.text(
             this.cameras.main.scrollX + width / 2,
             this.cameras.main.scrollY + height / 2.5,
-            'LEVEL COMPLETE!',
+            titleText,
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '40px',
@@ -1488,10 +1872,12 @@ class GameScene extends Phaser.Scene {
             }
         ).setOrigin(0.5);
 
+        // Score display
+        const scoreMessage = isLastLevel ? `Final Score: ${this.score}` : `Score: ${this.score}`;
         this.add.text(
             this.cameras.main.scrollX + width / 2,
             this.cameras.main.scrollY + height / 2,
-            'Final Score: ' + this.score,
+            scoreMessage,
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '28px',
@@ -1501,10 +1887,19 @@ class GameScene extends Phaser.Scene {
             }
         ).setOrigin(0.5);
 
+        // Next level or restart prompt
+        let promptMessage;
+        if (isLastLevel) {
+            promptMessage = this.isMobile ? 'Tap to play again' : 'Press any key to play again';
+        } else {
+            const nextLevel = LEVELS[this.currentLevel + 1];
+            promptMessage = this.isMobile ? `Tap for Level ${this.currentLevel + 2}: ${nextLevel.name}` : `Press any key for Level ${this.currentLevel + 2}`;
+        }
+
         const restartText = this.add.text(
             this.cameras.main.scrollX + width / 2,
             this.cameras.main.scrollY + height / 1.6,
-            isMobile ? 'Tap to play again' : 'Press R to play again',
+            promptMessage,
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '20px',
@@ -1523,40 +1918,56 @@ class GameScene extends Phaser.Scene {
         });
 
         this.time.delayedCall(1000, () => {
-            this.input.on('pointerdown', () => {
+            // Use once() to prevent listener accumulation
+            const advanceLevel = () => {
                 this.levelComplete = false;
                 this.checkpointActivated = false;
                 this.respawnX = 100;
                 this.respawnY = 100;
+
+                if (isLastLevel) {
+                    // Game complete - reset to level 0
+                    this.currentLevel = 0;
+                    this.score = 0;
+                    localStorage.setItem('superNoeCurrentLevel', '0');
+                } else {
+                    // Advance to next level (keep score!)
+                    this.currentLevel++;
+                    localStorage.setItem('superNoeCurrentLevel', this.currentLevel.toString());
+                }
+
                 this.scene.restart();
-            });
+            };
+
+            this.input.once('pointerdown', advanceLevel);
+            this.input.keyboard.once('keydown', advanceLevel);
         });
     }
 
     createHazards(width, height) {
-        // Add spikes - Move first spike further away (was 0.5)
-        this.spikes.create(width * 0.8, height - 36, 'spike');
-        this.spikes.create(width * 1.5, height - 36, 'spike');
-        this.spikes.create(width * 2.5, height - 36, 'spike');
+        const level = this.getLevelData();
 
-        // Add lava pits
-        const lavaX = [width * 1.2, width * 2.0, width * 3.0];
-        lavaX.forEach(x => {
-            this.lava.create(x, height - 10, 'lava').setScale(2, 1);
+        // Add spikes from level data
+        level.spikes.forEach(mult => {
+            this.spikes.create(width * mult, height - 36, 'spike');
+        });
+
+        // Add lava pits from level data
+        level.lavaPositions.forEach(mult => {
+            this.lava.create(width * mult, height - 10, 'lava').setScale(2, 1);
         });
     }
 
     createFlyingEnemies(width, height) {
-        const flyData = [
-            { x: width * 1.3, y: height * 0.3, range: 200 },
-            { x: width * 2.0, y: height * 0.25, range: 150 }
-        ];
+        const level = this.getLevelData();
 
-        flyData.forEach(data => {
-            const bee = this.flyingEnemies.create(data.x, data.y, 'bee');
+        level.flyingEnemies.forEach(data => {
+            const x = width * data.xMult;
+            const y = height * data.yMult;
+            const bee = this.flyingEnemies.create(x, y, 'bee');
             bee.body.setAllowGravity(false);
-            bee.setData('startX', data.x);
-            bee.setData('startY', data.y);
+            bee.setData('startX', x);
+            bee.setData('startY', y);
             bee.setData('range', data.range);
         });
     }

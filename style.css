@@ -93,9 +93,38 @@ body {
     transition: transform 0.1s, background 0.1s;
 }
 
-.sprint-button:active {
+.sprint-button:active,
+.sprint-button.active {
     transform: scale(0.9);
     background: rgba(150, 255, 180, 0.8);
+    border-color: rgba(150, 255, 180, 1);
+    box-shadow: 0 0 20px rgba(150, 255, 180, 0.6);
+}
+
+.pause-button {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    background: rgba(80, 80, 80, 0.7);
+    border: 3px solid rgba(255, 255, 255, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    color: white;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    touch-action: manipulation;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.1s;
+}
+
+.pause-button:active {
+    transform: scale(0.9);
+    background: rgba(120, 120, 120, 0.9);
 }
 
 /* Hide mobile controls on desktop */
@@ -103,7 +132,8 @@ body {
 
     .joystick-container,
     .jump-button,
-    .sprint-button {
+    .sprint-button,
+    .pause-button {
         display: none !important;
     }
 }
