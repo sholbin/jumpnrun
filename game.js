@@ -320,7 +320,8 @@ class GameScene extends Phaser.Scene {
 
         // Ground - seamless tiling with lava pits
         const groundY = height - 20;
-        const lavaX = [width * 0.9, width * 1.7, width * 2.5];
+        // These positions must match the lava pit positions in createHazards!
+        const lavaX = [width * 1.2, width * 2.0, width * 3.0];
 
         for (let x = -100; x < width * 4; x += tileWidth - 1) {
             // Check if this X is in a lava pit area
