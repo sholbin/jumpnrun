@@ -125,6 +125,9 @@ class GameScene extends Phaser.Scene {
         this.respawnX = 100;
         this.respawnY = 100;
         this.levelComplete = false;
+        // Polish: state tracking
+        this.wasInAir = false;
+        this.landSquashTween = null;
     }
 
     create() {
@@ -191,6 +194,16 @@ class GameScene extends Phaser.Scene {
         if (isMobile) {
             this.setupMobileControls();
         }
+
+        // Setup particle emitters for polish effects
+        this.setupParticles();
+
+        // Create damage flash overlay
+        this.damageFlash = this.add.rectangle(
+            this.scale.width / 2, this.scale.height / 2,
+            this.scale.width * 2, this.scale.height * 2,
+            0xffffff
+        ).setScrollFactor(0).setAlpha(0).setDepth(1000);
 
         this.scale.on('resize', () => this.scene.restart());
     }
@@ -393,9 +406,22 @@ class GameScene extends Phaser.Scene {
 
         // Classic Mario-style stomp: player is falling AND player center is above enemy center
         if (player.body.velocity.y > 0 && player.y < enemy.y) {
-            enemy.destroy();
+            // Stomp pop effect
+            this.emitStompPop(enemy.x, enemy.y);
+
+            // Animated enemy destruction
+            this.tweens.add({
+                targets: enemy,
+                scaleX: 1.5,
+                scaleY: 0.3,
+                alpha: 0,
+                duration: 150,
+                onComplete: () => enemy.destroy()
+            });
+
             player.setVelocityY(-400); // Bounce up
             this.updateScore(100);
+            this.showScorePopup(enemy.x, enemy.y - 20, 100);
             this.playSound('stomp');
             return;
         }
@@ -404,6 +430,12 @@ class GameScene extends Phaser.Scene {
         this.lives--;
         this.updateUI();
         this.playSound('hurt');
+
+        // Polish: damage effects
+        this.shakeCamera(0.01, 150);
+        this.flashScreen();
+        this.emitDamageParticles();
+        this.pulseHearts();
 
         if (this.lives <= 0) {
             this.physics.pause();
@@ -528,7 +560,20 @@ class GameScene extends Phaser.Scene {
     }
 
     collectCoin(player, coin) {
-        coin.disableBody(true, true);
+        // Animated coin collection
+        this.emitSparkles(coin.x, coin.y);
+        this.showScorePopup(coin.x, coin.y - 10, 10);
+
+        // Scale up and fade out
+        this.tweens.add({
+            targets: coin,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            alpha: 0,
+            duration: 150,
+            onComplete: () => coin.disableBody(true, true)
+        });
+
         this.updateScore(10);
         this.playSound('coin');
     }
@@ -589,6 +634,38 @@ class GameScene extends Phaser.Scene {
                     gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
                     osc.start(now);
                     osc.stop(now + 0.3);
+                    break;
+                case 'land':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(80, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.05);
+                    gain.gain.setValueAtTime(0.03, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                    break;
+                case 'checkpoint':
+                    // Ascending arpeggio C-E-G
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523, now); // C5
+                    osc.frequency.setValueAtTime(659, now + 0.1); // E5
+                    osc.frequency.setValueAtTime(784, now + 0.2); // G5
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                    break;
+                case 'finish':
+                    // Victory fanfare - two-tone celebration
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.setValueAtTime(659, now + 0.15);
+                    osc.frequency.setValueAtTime(784, now + 0.3);
+                    osc.frequency.setValueAtTime(1047, now + 0.45);
+                    gain.gain.setValueAtTime(0.06, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
+                    osc.start(now);
+                    osc.stop(now + 0.6);
                     break;
             }
         } catch (e) {
@@ -651,6 +728,247 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.setDeadzone(120, 80);
 
         this.physics.world.setBounds(-200, 0, width * 4, height);
+    }
+
+    // ============================================
+    // POLISH: PARTICLE SYSTEMS
+    // ============================================
+    setupParticles() {
+        // Create particle textures
+        this.createParticleTextures();
+
+        // Dust particle emitter (for landing and running)
+        this.dustEmitter = this.add.particles(0, 0, 'dust_particle', {
+            speed: { min: 20, max: 60 },
+            angle: { min: 230, max: 310 },
+            scale: { start: 0.8, end: 0 },
+            lifespan: 400,
+            gravityY: 100,
+            alpha: { start: 0.7, end: 0 },
+            emitting: false
+        });
+
+        // Coin sparkle emitter
+        this.sparkleEmitter = this.add.particles(0, 0, 'sparkle_particle', {
+            speed: { min: 80, max: 150 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.6, end: 0 },
+            lifespan: 500,
+            alpha: { start: 1, end: 0 },
+            emitting: false
+        });
+
+        // Stomp pop emitter
+        this.stompEmitter = this.add.particles(0, 0, 'stomp_particle', {
+            speed: { min: 100, max: 200 },
+            angle: { min: 200, max: 340 },
+            scale: { start: 0.5, end: 0 },
+            lifespan: 350,
+            gravityY: 300,
+            alpha: { start: 1, end: 0 },
+            emitting: false
+        });
+
+        // Damage flash particles
+        this.damageEmitter = this.add.particles(0, 0, 'damage_particle', {
+            speed: { min: 50, max: 100 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.4, end: 0 },
+            lifespan: 300,
+            alpha: { start: 0.8, end: 0 },
+            emitting: false
+        });
+
+        // Confetti emitter for finish
+        this.confettiEmitter = this.add.particles(0, 0, 'confetti_particle', {
+            speed: { min: 100, max: 300 },
+            angle: { min: 250, max: 290 },
+            scale: { start: 0.6, end: 0.3 },
+            lifespan: 2000,
+            gravityY: 150,
+            alpha: { start: 1, end: 0.5 },
+            rotate: { min: 0, max: 360 },
+            emitting: false
+        });
+    }
+
+    createParticleTextures() {
+        // Dust particle (brown circle)
+        const dust = this.make.graphics();
+        dust.fillStyle(0x8b7355, 1);
+        dust.fillCircle(8, 8, 8);
+        dust.generateTexture('dust_particle', 16, 16);
+        dust.destroy();
+
+        // Sparkle particle (golden star-like)
+        const sparkle = this.make.graphics();
+        sparkle.fillStyle(0xffd700, 1);
+        sparkle.fillCircle(6, 6, 6);
+        sparkle.fillStyle(0xffff00, 1);
+        sparkle.fillCircle(6, 6, 3);
+        sparkle.generateTexture('sparkle_particle', 12, 12);
+        sparkle.destroy();
+
+        // Stomp particle (green for slime)
+        const stomp = this.make.graphics();
+        stomp.fillStyle(0x76c900, 1);
+        stomp.fillCircle(6, 6, 6);
+        stomp.generateTexture('stomp_particle', 12, 12);
+        stomp.destroy();
+
+        // Damage particle (red)
+        const damage = this.make.graphics();
+        damage.fillStyle(0xff4444, 1);
+        damage.fillCircle(5, 5, 5);
+        damage.generateTexture('damage_particle', 10, 10);
+        damage.destroy();
+
+        // Confetti particles (multiple colors)
+        const confetti = this.make.graphics();
+        confetti.fillStyle(0xff6b6b, 1);
+        confetti.fillRect(0, 0, 8, 12);
+        confetti.fillStyle(0x4ecdc4, 1);
+        confetti.fillRect(10, 0, 8, 12);
+        confetti.fillStyle(0xffe66d, 1);
+        confetti.fillRect(20, 0, 8, 12);
+        confetti.generateTexture('confetti_particle', 8, 12);
+        confetti.destroy();
+    }
+
+    // Score popup floating text
+    showScorePopup(x, y, amount) {
+        const color = amount >= 100 ? '#ffff00' : '#ffffff';
+        const size = amount >= 100 ? '24px' : '18px';
+
+        const popup = this.add.text(x, y, `+${amount}`, {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: size,
+            fill: color,
+            stroke: '#000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: popup,
+            y: y - 50,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => popup.destroy()
+        });
+    }
+
+    // Emit dust particles at position
+    emitDust(x, y, count = 5) {
+        if (this.dustEmitter) {
+            this.dustEmitter.emitParticleAt(x, y, count);
+        }
+    }
+
+    // Emit sparkles at position
+    emitSparkles(x, y, count = 8) {
+        if (this.sparkleEmitter) {
+            this.sparkleEmitter.emitParticleAt(x, y, count);
+        }
+    }
+
+    // Emit stomp particles
+    emitStompPop(x, y, count = 10) {
+        if (this.stompEmitter) {
+            this.stompEmitter.emitParticleAt(x, y, count);
+        }
+    }
+
+    // Emit damage particles around player
+    emitDamageParticles() {
+        if (this.damageEmitter && this.player) {
+            this.damageEmitter.emitParticleAt(this.player.x, this.player.y, 12);
+        }
+    }
+
+    // Camera shake effect
+    shakeCamera(intensity = 0.01, duration = 100) {
+        this.cameras.main.shake(duration, intensity);
+    }
+
+    // White flash effect
+    flashScreen() {
+        if (this.damageFlash) {
+            this.tweens.add({
+                targets: this.damageFlash,
+                alpha: { from: 0.6, to: 0 },
+                duration: 150,
+                ease: 'Power2'
+            });
+        }
+    }
+
+    // Player squash effect on landing
+    squashPlayer() {
+        if (this.landSquashTween) {
+            this.landSquashTween.stop();
+        }
+
+        this.landSquashTween = this.tweens.add({
+            targets: this.player,
+            scaleX: 0.25,
+            scaleY: 0.16,
+            duration: 80,
+            yoyo: true,
+            ease: 'Power2'
+        });
+    }
+
+    // Player stretch effect during jump
+    stretchPlayer() {
+        this.player.setScale(0.18, 0.23);
+    }
+
+    // Reset player scale
+    resetPlayerScale() {
+        if (!this.landSquashTween || !this.landSquashTween.isPlaying()) {
+            this.player.setScale(0.2);
+        }
+    }
+
+    // Pulse hearts animation on damage
+    pulseHearts() {
+        if (this.livesText) {
+            this.tweens.add({
+                targets: this.livesText,
+                scaleX: 1.3,
+                scaleY: 1.3,
+                duration: 100,
+                yoyo: true,
+                repeat: 2,
+                ease: 'Power2'
+            });
+
+            // Red flash on text
+            this.livesText.setTint(0xff0000);
+            this.time.delayedCall(300, () => {
+                if (this.livesText) this.livesText.clearTint();
+            });
+        }
+    }
+
+    // Emit confetti for finish
+    emitConfetti() {
+        if (this.confettiEmitter) {
+            const { width } = this.scale;
+            const scrollX = this.cameras.main.scrollX;
+
+            // Emit from multiple points across screen
+            for (let i = 0; i < 5; i++) {
+                this.time.delayedCall(i * 100, () => {
+                    this.confettiEmitter.emitParticleAt(
+                        scrollX + (width * 0.2) + (i * width * 0.15),
+                        0,
+                        15
+                    );
+                });
+            }
+        }
     }
 
     setupMobileControls() {
@@ -848,12 +1166,39 @@ class GameScene extends Phaser.Scene {
         // Animations
         if (!this.player.body.touching.down) {
             this.player.anims.play('jump', true);
+            // Stretch player during jump ascent
+            if (this.player.body.velocity.y < -100) {
+                this.stretchPlayer();
+            }
         } else if (isMoving && this.isSprinting) {
             this.player.anims.play('sprint', true);
+            this.resetPlayerScale();
         } else if (isMoving) {
             this.player.anims.play('run', true);
+            this.resetPlayerScale();
         } else {
             this.player.anims.play('idle', true);
+            this.resetPlayerScale();
+        }
+
+        // Polish: Landing detection
+        if (isOnGround && this.wasInAir) {
+            // Just landed!
+            this.emitDust(this.player.x, this.player.y + 15, 6);
+            this.squashPlayer();
+            this.playSound('land');
+        }
+        this.wasInAir = !isOnGround;
+
+        // Polish: Sprint dust trail
+        if (isOnGround && this.isSprinting && isMoving) {
+            // Emit occasional dust while sprinting
+            if (Math.random() < 0.15) {
+                const dustX = this.lastDirection === 'right'
+                    ? this.player.x - 15
+                    : this.player.x + 15;
+                this.emitDust(dustX, this.player.y + 15, 2);
+            }
         }
 
         // Enemy Patrol Logic
@@ -1071,7 +1416,8 @@ class GameScene extends Phaser.Scene {
             yoyo: true
         });
 
-        this.playSound('coin');
+        this.playSound('checkpoint');
+        this.emitSparkles(checkpoint.x, checkpoint.y - 40, 12);
 
         const { width, height } = this.scale;
         const text = this.add.text(
@@ -1111,9 +1457,17 @@ class GameScene extends Phaser.Scene {
             repeat: 2
         });
 
-        this.playSound('coin');
-        this.time.delayedCall(200, () => this.playSound('coin'));
-        this.time.delayedCall(400, () => this.playSound('coin'));
+        // Victory effects
+        this.playSound('finish');
+        this.emitConfetti();
+
+        // Camera zoom effect
+        this.tweens.add({
+            targets: this.cameras.main,
+            zoom: 1.2,
+            duration: 800,
+            ease: 'Power2'
+        });
 
         const { width, height } = this.scale;
 
