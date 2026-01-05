@@ -128,6 +128,7 @@ class GameScene extends Phaser.Scene {
         // Polish: state tracking
         this.wasInAir = false;
         this.landSquashTween = null;
+        this.lastYVelocity = 0;
     }
 
     create() {
@@ -1181,14 +1182,16 @@ class GameScene extends Phaser.Scene {
             this.resetPlayerScale();
         }
 
-        // Polish: Landing detection
-        if (isOnGround && this.wasInAir) {
-            // Just landed!
+        // Polish: Landing detection - only trigger when actually landing from a fall/jump
+        // wasInAir must be true AND we must have had significant downward velocity
+        if (isOnGround && this.wasInAir && this.lastYVelocity > 50) {
+            // Just landed from a real jump/fall!
             this.emitDust(this.player.x, this.player.y + 15, 6);
             this.squashPlayer();
             this.playSound('land');
         }
         this.wasInAir = !isOnGround;
+        this.lastYVelocity = this.player.body.velocity.y;
 
         // Polish: Sprint dust trail
         if (isOnGround && this.isSprinting && isMoving) {
@@ -1474,7 +1477,7 @@ class GameScene extends Phaser.Scene {
         this.add.text(
             this.cameras.main.scrollX + width / 2,
             this.cameras.main.scrollY + height / 2.5,
-            '🎉 LEVEL COMPLETE! 🎉',
+            'LEVEL COMPLETE!',
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '40px',
