@@ -826,13 +826,13 @@ class GameScene extends Phaser.Scene {
         this.highScoreText = this.add.text(20, 110, `High: ${this.highScore}`, { ...textStyle, fontSize: '18px', fill: '#ffd700' }).setScrollFactor(0);
 
         // Leaderboard button (top right, below level)
-        const lbBtn = this.add.text(width - 20, 50, '🏆 Leaderboard', {
+        const lbBtn = this.add.text(width - 20, 50, 'Leaderboard', {
             ...textStyle,
             fontSize: '16px',
-            fill: '#ffd700',
-            backgroundColor: '#333',
-            padding: { x: 8, y: 4 }
+            fill: '#ffd700'
         }).setScrollFactor(0).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+        lbBtn.on('pointerover', () => lbBtn.setStyle({ fill: '#ffeb3b' }));
+        lbBtn.on('pointerout', () => lbBtn.setStyle({ fill: '#ffd700' }));
         lbBtn.on('pointerdown', () => this.showLeaderboard());
 
         // PC Hint
@@ -1702,9 +1702,18 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
-        // Pause toggle (P or ESC key)
-        if ((this.pKey && Phaser.Input.Keyboard.JustDown(this.pKey)) ||
-            (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey))) {
+        // ESC key - close leaderboard first, otherwise toggle pause
+        if (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey)) {
+            if (this.leaderboardElements) {
+                this.hideLeaderboard();
+            } else {
+                this.togglePause();
+            }
+            return;
+        }
+
+        // P key - toggle pause
+        if (this.pKey && Phaser.Input.Keyboard.JustDown(this.pKey)) {
             this.togglePause();
             return;
         }
