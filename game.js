@@ -83,7 +83,15 @@ const LEVELS = [
         spikes: [0.8, 1.5, 2.5],
         // Checkpoint and finish positions
         checkpoint: { xMult: 1.8 },
-        finish: { xMult: 3.5 }
+        finish: { xMult: 3.5 },
+        // Mystery blocks: x position, yOffset from ground, contents (mushroom/star/heart/coins)
+        mysteryBlocks: [
+            { x: 250, yOffset: 120, contents: 'mushroom' },
+            { x: 600, yOffset: 140, contents: 'coins' },
+            { x: 1100, yOffset: 100, contents: 'star' },
+            { x: 1600, yOffset: 160, contents: 'heart' },
+            { x: 2200, yOffset: 120, contents: 'mushroom' }
+        ]
     },
     // Level 2: Rising Challenge
     {
@@ -135,7 +143,15 @@ const LEVELS = [
         ],
         spikes: [0.6, 1.1, 1.6, 2.1, 2.8],
         checkpoint: { xMult: 2.2 },
-        finish: { xMult: 4.5 }
+        finish: { xMult: 4.5 },
+        mysteryBlocks: [
+            { x: 300, yOffset: 130, contents: 'mushroom' },
+            { x: 700, yOffset: 150, contents: 'coins' },
+            { x: 1200, yOffset: 110, contents: 'star' },
+            { x: 1800, yOffset: 140, contents: 'mushroom' },
+            { x: 2400, yOffset: 160, contents: 'heart' },
+            { x: 3000, yOffset: 130, contents: 'star' }
+        ]
     },
     // Level 3: Expert Challenge
     {
@@ -200,7 +216,17 @@ const LEVELS = [
         ],
         spikes: [0.5, 0.9, 1.3, 1.7, 2.2, 2.6, 3.0, 3.4, 4.0],
         checkpoint: { xMult: 2.8 },
-        finish: { xMult: 5.5 }
+        finish: { xMult: 5.5 },
+        mysteryBlocks: [
+            { x: 200, yOffset: 140, contents: 'mushroom' },
+            { x: 500, yOffset: 160, contents: 'star' },
+            { x: 900, yOffset: 120, contents: 'coins' },
+            { x: 1400, yOffset: 180, contents: 'heart' },
+            { x: 1900, yOffset: 140, contents: 'mushroom' },
+            { x: 2500, yOffset: 160, contents: 'star' },
+            { x: 3100, yOffset: 130, contents: 'heart' },
+            { x: 3700, yOffset: 150, contents: 'mushroom' }
+        ]
     }
 ];
 
@@ -350,6 +376,17 @@ class GameScene extends Phaser.Scene {
         this.jumpReleased = true; // Track if jump button was released
         // Ground stability - prevents physics jitter after landing
         this.groundedFrames = 0; // Frames since last confirmed ground contact
+        // Timer system
+        this.levelTime = 120; // 2 minutes in seconds
+        this.timerText = null;
+        this.timerWarning = false;
+        // Powerup system
+        this.isPoweredUp = false; // Mushroom state (big)
+        this.isStarPowered = false; // Star invincibility
+        this.starTimer = null;
+        this.totalCoins = 0; // Track total coins for 100 = 1 life
+        this.mysteryBlocks = null;
+        this.powerups = null;
     }
 
     // Get current level data
@@ -424,9 +461,15 @@ class GameScene extends Phaser.Scene {
         this.generateBeeTexture();
         this.generateCheckpointTexture();
         this.generateFinishLineTexture();
+        this.generateMysteryBlockTexture();
+        this.generateMushroomTexture();
+        this.generateStarTexture();
+        this.generateHeartTexture();
 
         this.createHazards(width, height);
         this.createFlyingEnemies(width, height);
+        this.createMysteryBlocks(width, height);
+        this.createPowerupGroup();
         this.createCheckpointAndFinish(width, height);
 
         // Physics
@@ -745,6 +788,17 @@ class GameScene extends Phaser.Scene {
             return;
         }
 
+        // Check if powered up - shrink instead of losing life
+        if (this.shrinkPlayer()) {
+            this.playSound('hurt');
+            this.shakeCamera(0.01, 150);
+            // Knockback
+            const bounceDirection = (player.x < enemy.x) ? -300 : 300;
+            player.setVelocityX(bounceDirection);
+            player.setVelocityY(-300);
+            return;
+        }
+
         // Damage player
         this.lives--;
         this.updateUI();
@@ -824,6 +878,20 @@ class GameScene extends Phaser.Scene {
         }).setScrollFactor(0).setOrigin(1, 0);
 
         this.highScoreText = this.add.text(20, 110, `High: ${this.highScore}`, { ...textStyle, fontSize: '18px', fill: '#ffd700' }).setScrollFactor(0);
+
+        // Timer display (center top)
+        this.timerText = this.add.text(width / 2, 20, 'TIME: 2:00', {
+            ...textStyle,
+            fontSize: '26px',
+            fill: '#ffffff'
+        }).setScrollFactor(0).setOrigin(0.5, 0);
+
+        // Coin counter for 100 = 1 life
+        this.coinCountText = this.add.text(width / 2, 50, `Coins: ${this.totalCoins}/100`, {
+            ...textStyle,
+            fontSize: '16px',
+            fill: '#ffd700'
+        }).setScrollFactor(0).setOrigin(0.5, 0);
 
         // Leaderboard button (top right, below level)
         const lbBtn = this.add.text(width - 20, 50, 'Leaderboard', {
@@ -1197,6 +1265,20 @@ class GameScene extends Phaser.Scene {
 
         this.updateScore(10);
         this.playSound('coin');
+
+        // Track coins for 100 = 1 life
+        this.totalCoins++;
+        if (this.totalCoins >= 100) {
+            this.totalCoins = 0;
+            this.lives++;
+            this.updateUI();
+            this.showScorePopup(player.x, player.y - 50, '1-UP!');
+            this.playSound('finish');
+        }
+        // Update coin counter display
+        if (this.coinCountText) {
+            this.coinCountText.setText(`Coins: ${this.totalCoins}/100`);
+        }
     }
 
     playSound(type) {
@@ -1731,6 +1813,58 @@ class GameScene extends Phaser.Scene {
         // Don't process game logic while paused
         if (this.isPaused) return;
 
+        // Timer countdown
+        if (!this.levelComplete) {
+            this.levelTime -= this.game.loop.delta / 1000;
+
+            if (this.levelTime <= 0) {
+                // Time's up! Lose a life
+                this.levelTime = 120; // Reset timer
+                this.lives--;
+                this.updateUI();
+                this.playSound('hurt');
+
+                if (this.lives <= 0) {
+                    this.lives = 3;
+                    if (this.checkpointActivated) {
+                        this.player.setPosition(this.respawnX, this.respawnY);
+                        this.player.setVelocity(0, 0);
+                        this.updateUI();
+                    } else {
+                        this.score = 0;
+                        this.scene.restart();
+                        return;
+                    }
+                } else {
+                    this.player.setPosition(this.respawnX, this.respawnY);
+                    this.player.setVelocity(0, 0);
+                }
+            }
+
+            // Update timer display
+            const mins = Math.floor(this.levelTime / 60);
+            const secs = Math.floor(this.levelTime % 60);
+            const timeStr = `TIME: ${mins}:${secs.toString().padStart(2, '0')}`;
+
+            if (this.timerText) {
+                this.timerText.setText(timeStr);
+
+                // Warning at 30 seconds
+                if (this.levelTime <= 30 && !this.timerWarning) {
+                    this.timerWarning = true;
+                    this.timerText.setStyle({ fill: '#ff4444' });
+                    // Flash effect
+                    this.tweens.add({
+                        targets: this.timerText,
+                        alpha: 0.5,
+                        duration: 300,
+                        yoyo: true,
+                        repeat: -1
+                    });
+                }
+            }
+        }
+
         // Restart shortcut (PC) - Check this first to ensure responsiveness
         if (this.rKey && Phaser.Input.Keyboard.JustDown(this.rKey)) {
             this.lives = 3;
@@ -2144,6 +2278,134 @@ class GameScene extends Phaser.Scene {
         g.destroy();
     }
 
+    generateMysteryBlockTexture() {
+        const g = this.make.graphics();
+        const s = 40;
+
+        // Block body (golden/orange)
+        g.fillStyle(0xd4a017, 1);
+        g.fillRect(0, 0, s, s);
+
+        // Border
+        g.lineStyle(3, 0x8b6914, 1);
+        g.strokeRect(0, 0, s, s);
+
+        // Question mark
+        g.fillStyle(0xffffff, 1);
+        // Top of ?
+        g.fillRoundedRect(12, 8, 16, 6, 2);
+        g.fillRect(22, 10, 6, 10);
+        g.fillRoundedRect(12, 16, 16, 6, 2);
+        g.fillRect(12, 18, 6, 6);
+        // Dot
+        g.fillRect(14, 28, 6, 6);
+
+        // Shine
+        g.fillStyle(0xffeb3b, 0.5);
+        g.fillRect(4, 4, 8, 8);
+
+        g.generateTexture('mystery_block', s, s);
+        g.destroy();
+
+        // Used block (grey)
+        const g2 = this.make.graphics();
+        g2.fillStyle(0x666666, 1);
+        g2.fillRect(0, 0, s, s);
+        g2.lineStyle(3, 0x444444, 1);
+        g2.strokeRect(0, 0, s, s);
+        g2.generateTexture('mystery_block_used', s, s);
+        g2.destroy();
+    }
+
+    generateMushroomTexture() {
+        const g = this.make.graphics();
+        const w = 32, h = 32;
+
+        // Stem
+        g.fillStyle(0xf5f5dc, 1);
+        g.fillRect(10, 18, 12, 14);
+
+        // Cap
+        g.fillStyle(0xff0000, 1);
+        g.fillEllipse(16, 14, 28, 20);
+
+        // White spots
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(8, 12, 4);
+        g.fillCircle(16, 8, 5);
+        g.fillCircle(24, 12, 4);
+
+        // Eyes
+        g.fillStyle(0x000000, 1);
+        g.fillCircle(12, 16, 2);
+        g.fillCircle(20, 16, 2);
+
+        g.generateTexture('mushroom', w, h);
+        g.destroy();
+    }
+
+    generateStarTexture() {
+        const g = this.make.graphics();
+        const s = 32;
+
+        // Star shape (5-pointed)
+        g.fillStyle(0xffd700, 1);
+        g.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const outerAngle = (i * 72 - 90) * Math.PI / 180;
+            const innerAngle = ((i * 72) + 36 - 90) * Math.PI / 180;
+            const outerX = 16 + Math.cos(outerAngle) * 14;
+            const outerY = 16 + Math.sin(outerAngle) * 14;
+            const innerX = 16 + Math.cos(innerAngle) * 6;
+            const innerY = 16 + Math.sin(innerAngle) * 6;
+            if (i === 0) g.moveTo(outerX, outerY);
+            else g.lineTo(outerX, outerY);
+            g.lineTo(innerX, innerY);
+        }
+        g.closePath();
+        g.fillPath();
+
+        // Inner glow
+        g.fillStyle(0xffeb3b, 1);
+        g.fillCircle(16, 16, 6);
+
+        // Eyes
+        g.fillStyle(0x000000, 1);
+        g.fillCircle(13, 15, 2);
+        g.fillCircle(19, 15, 2);
+
+        g.generateTexture('star_powerup', s, s);
+        g.destroy();
+    }
+
+    generateHeartTexture() {
+        const g = this.make.graphics();
+        const s = 28;
+
+        // Heart shape (1-Up)
+        g.fillStyle(0x00ff00, 1);
+        g.fillCircle(9, 10, 8);
+        g.fillCircle(19, 10, 8);
+        g.beginPath();
+        g.moveTo(1, 12);
+        g.lineTo(14, 26);
+        g.lineTo(27, 12);
+        g.closePath();
+        g.fillPath();
+
+        // Shine
+        g.fillStyle(0x80ff80, 1);
+        g.fillCircle(8, 8, 3);
+
+        // "1UP" text effect - small plus
+        g.fillStyle(0xffffff, 1);
+        g.fillRect(12, 10, 4, 10);
+        g.fillRect(9, 13, 10, 4);
+
+        g.generateTexture('heart_1up', s, s);
+        g.destroy();
+    }
+
     createCheckpointAndFinish(width, height) {
         const level = this.getLevelData();
         const groundY = height - 20;
@@ -2173,6 +2435,220 @@ class GameScene extends Phaser.Scene {
         // Collision detection
         this.physics.add.overlap(this.player, this.checkpoint, this.activateCheckpoint, null, this);
         this.physics.add.overlap(this.player, this.finishLine, this.reachFinish, null, this);
+    }
+
+    createMysteryBlocks(width, height) {
+        const level = this.getLevelData();
+        const groundY = height - 20;
+
+        this.mysteryBlocks = this.physics.add.staticGroup();
+
+        if (level.mysteryBlocks) {
+            level.mysteryBlocks.forEach(block => {
+                const b = this.mysteryBlocks.create(block.x, groundY - block.yOffset, 'mystery_block');
+                b.setData('contents', block.contents);
+                b.setData('used', false);
+
+                // Subtle floating animation
+                this.tweens.add({
+                    targets: b,
+                    y: b.y - 3,
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            });
+        }
+
+        // Collision from below triggers the block
+        this.physics.add.collider(this.player, this.mysteryBlocks, this.hitMysteryBlock, null, this);
+    }
+
+    createPowerupGroup() {
+        this.powerups = this.physics.add.group();
+        this.physics.add.collider(this.powerups, this.platforms);
+        this.physics.add.overlap(this.player, this.powerups, this.collectPowerup, null, this);
+    }
+
+    hitMysteryBlock(player, block) {
+        // Only trigger if hitting from below
+        if (player.body.touching.up && block.body.touching.down && !block.getData('used')) {
+            block.setData('used', true);
+            block.setTexture('mystery_block_used');
+
+            // Stop floating animation
+            this.tweens.killTweensOf(block);
+
+            // Bump animation
+            this.tweens.add({
+                targets: block,
+                y: block.y - 8,
+                duration: 80,
+                yoyo: true,
+                ease: 'Power2'
+            });
+
+            // Spawn contents
+            const contents = block.getData('contents');
+            this.spawnPowerup(block.x, block.y - 30, contents);
+            this.playSound('coin'); // Use coin sound for now
+        }
+    }
+
+    spawnPowerup(x, y, type) {
+        let powerup;
+
+        if (type === 'coins') {
+            // Spawn 5 coins
+            for (let i = 0; i < 5; i++) {
+                const coin = this.coins.create(x + (i - 2) * 20, y - 20, 'coin');
+                coin.setBounce(0.5);
+                coin.setVelocityY(-200 - Math.random() * 100);
+                coin.setVelocityX((i - 2) * 40);
+            }
+            return;
+        }
+
+        const textureMap = {
+            'mushroom': 'mushroom',
+            'star': 'star_powerup',
+            'heart': 'heart_1up'
+        };
+
+        powerup = this.powerups.create(x, y, textureMap[type]);
+        powerup.setData('type', type);
+        powerup.setBounce(0.4);
+        powerup.setVelocityY(-150);
+
+        // Mushroom and star move sideways
+        if (type === 'mushroom' || type === 'star') {
+            powerup.setVelocityX(80);
+        }
+
+        // Floating animation for heart
+        if (type === 'heart') {
+            powerup.body.setAllowGravity(false);
+            this.tweens.add({
+                targets: powerup,
+                y: y - 20,
+                duration: 1000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+    }
+
+    collectPowerup(player, powerup) {
+        const type = powerup.getData('type');
+        powerup.destroy();
+
+        switch (type) {
+            case 'mushroom':
+                this.applyMushroom();
+                break;
+            case 'star':
+                this.applyStar();
+                break;
+            case 'heart':
+                this.applyHeart();
+                break;
+        }
+    }
+
+    applyMushroom() {
+        if (this.isPoweredUp) {
+            // Already big - give points instead
+            this.updateScore(500);
+            this.showScorePopup(this.player.x, this.player.y - 30, 500);
+        } else {
+            this.isPoweredUp = true;
+            // Grow bigger
+            this.tweens.add({
+                targets: this.player,
+                scaleX: 0.28,
+                scaleY: 0.28,
+                duration: 300,
+                ease: 'Back.easeOut'
+            });
+            if (this.playerCap) {
+                this.tweens.add({
+                    targets: this.playerCap,
+                    scaleX: 0.3,
+                    scaleY: 0.3,
+                    duration: 300,
+                    ease: 'Back.easeOut'
+                });
+            }
+            this.showScorePopup(this.player.x, this.player.y - 30, 'POWER UP!');
+        }
+        this.playSound('coin');
+    }
+
+    applyStar() {
+        this.isStarPowered = true;
+        this.isInvincible = true;
+
+        // Rainbow flashing effect
+        this.starTween = this.tweens.add({
+            targets: this.player,
+            tint: { from: 0xff0000, to: 0x00ff00 },
+            duration: 100,
+            yoyo: true,
+            repeat: -1
+        });
+
+        // Clear after 8 seconds
+        if (this.starTimer) this.starTimer.remove();
+        this.starTimer = this.time.delayedCall(8000, () => {
+            this.isStarPowered = false;
+            this.isInvincible = false;
+            if (this.starTween) this.starTween.stop();
+            this.player.clearTint();
+        });
+
+        this.showScorePopup(this.player.x, this.player.y - 30, 'STAR POWER!');
+        this.playSound('coin');
+    }
+
+    applyHeart() {
+        this.lives++;
+        this.updateUI();
+        this.showScorePopup(this.player.x, this.player.y - 30, '1-UP!');
+        this.playSound('finish');
+    }
+
+    // Called when player takes damage while powered up
+    shrinkPlayer() {
+        if (this.isPoweredUp) {
+            this.isPoweredUp = false;
+            this.tweens.add({
+                targets: this.player,
+                scaleX: 0.2,
+                scaleY: 0.2,
+                duration: 200,
+                ease: 'Power2'
+            });
+            if (this.playerCap) {
+                this.tweens.add({
+                    targets: this.playerCap,
+                    scaleX: 0.22,
+                    scaleY: 0.22,
+                    duration: 200,
+                    ease: 'Power2'
+                });
+            }
+            // Brief invincibility after shrinking
+            this.isInvincible = true;
+            this.player.setAlpha(0.6);
+            this.time.delayedCall(1500, () => {
+                this.isInvincible = false;
+                this.player.setAlpha(1);
+            });
+            return true; // Damage absorbed
+        }
+        return false; // No protection
     }
 
     activateCheckpoint(player, checkpoint) {
