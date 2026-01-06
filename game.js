@@ -345,6 +345,8 @@ class GameScene extends Phaser.Scene {
         this.jumpBufferTime = 0; // Frames since jump was pressed (allows early jumps)
         this.isJumping = false; // Track if we're in a jump (for variable height)
         this.jumpReleased = true; // Track if jump button was released
+        // Ground stability - prevents physics jitter after landing
+        this.groundedFrames = 0; // Frames since last confirmed ground contact
     }
 
     // Get current level data
@@ -784,19 +786,20 @@ class GameScene extends Phaser.Scene {
         this.physics.pause();
 
         const { width, height } = this.scale;
-        const centerX = this.cameras.main.scrollX + width / 2;
-        const centerY = this.cameras.main.scrollY + height / 2;
 
-        // Create pause menu container
-        this.pauseMenu = this.add.container(centerX, centerY);
+        // Create pause menu container at screen center (not camera-relative)
+        // Container at (0,0) with scrollFactor(0) means it's viewport-fixed
+        this.pauseMenu = this.add.container(0, 0);
+        this.pauseMenu.setScrollFactor(0);
+        this.pauseMenu.setDepth(2000);
 
-        // Dark overlay
-        const overlay = this.add.rectangle(0, 0, width * 2, height * 2, 0x000000, 0.7);
-        overlay.setScrollFactor(0);
+        // Dark overlay - covers entire viewport, positioned at viewport center
+        // Using very large size to ensure full coverage regardless of any edge cases
+        const overlay = this.add.rectangle(width / 2, height / 2, width * 3, height * 3, 0x000000, 0.8);
         this.pauseMenu.add(overlay);
 
-        // Pause title
-        const pauseTitle = this.add.text(0, -100, 'PAUSED', {
+        // Pause title - positioned at viewport center
+        const pauseTitle = this.add.text(width / 2, height / 2 - 100, 'PAUSED', {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '48px',
             fill: '#ffffff',
@@ -817,7 +820,7 @@ class GameScene extends Phaser.Scene {
         };
 
         // Resume button
-        const resumeBtn = this.add.text(0, -20, '  Resume  ', buttonStyle)
+        const resumeBtn = this.add.text(width / 2, height / 2 - 20, '  Resume  ', buttonStyle)
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => resumeBtn.setStyle({ fill: '#88ff88' }))
@@ -826,7 +829,7 @@ class GameScene extends Phaser.Scene {
         this.pauseMenu.add(resumeBtn);
 
         // Restart Level button
-        const restartBtn = this.add.text(0, 40, 'Restart Level', buttonStyle)
+        const restartBtn = this.add.text(width / 2, height / 2 + 40, 'Restart Level', buttonStyle)
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => restartBtn.setStyle({ fill: '#ffff88' }))
@@ -841,7 +844,7 @@ class GameScene extends Phaser.Scene {
         this.pauseMenu.add(restartBtn);
 
         // Back to Title button
-        const titleBtn = this.add.text(0, 100, ' Main Menu ', buttonStyle)
+        const titleBtn = this.add.text(width / 2, height / 2 + 100, ' Main Menu ', buttonStyle)
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => titleBtn.setStyle({ fill: '#ff8888' }))
@@ -854,15 +857,12 @@ class GameScene extends Phaser.Scene {
 
         // Hint text
         const hintText = this.isMobile ? 'Tap Resume to continue' : 'Press P or ESC to resume';
-        const hint = this.add.text(0, 160, hintText, {
+        const hint = this.add.text(width / 2, height / 2 + 160, hintText, {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '16px',
             fill: '#aaaaaa'
         }).setOrigin(0.5);
         this.pauseMenu.add(hint);
-
-        this.pauseMenu.setDepth(2000);
-        this.pauseMenu.setScrollFactor(0);
     }
 
     resumeGame() {
@@ -1040,10 +1040,9 @@ class GameScene extends Phaser.Scene {
         this.player.setBounce(0); // No bounce - prevents double landing and ground instability
         this.player.setCollideWorldBounds(false);
 
-        // Hitbox for scaled character - tighter box aligned with feet
-        // Original sprite ~130x240, we want a narrower hitbox centered on the body
-        this.player.body.setSize(80, 200);
-        this.player.body.setOffset(25, 40);
+        // Hitbox for scaled character
+        this.player.body.setSize(100, 180);
+        this.player.body.setOffset(16, 60);
 
         // Create animations from atlas frames
         this.anims.create({
@@ -1428,6 +1427,7 @@ class GameScene extends Phaser.Scene {
             this.jumpReleased = false;
             this.coyoteTime = 0; // Used up coyote time
             this.jumpBufferTime = 0;
+            this.groundedFrames = 0; // Clear ground stability when jumping
             this.playSound('jump');
         }
     }
@@ -1567,16 +1567,20 @@ class GameScene extends Phaser.Scene {
                 this.jumpReleased = false;
                 this.coyoteTime = 0;
                 this.jumpBufferTime = 0;
+                this.groundedFrames = 0; // Clear ground stability when jumping
                 this.playSound('jump');
             }
         }
 
         // Mario physics: Track coyote time (can jump shortly after leaving platform)
+        // Also track grounded frames for stability
         if (isOnGround) {
             this.coyoteTime = 8; // 8 frames of coyote time
             this.isJumping = false;
+            this.groundedFrames = 10; // Stay "stable" for 10 frames after ground contact
         } else {
             this.coyoteTime = Math.max(0, this.coyoteTime - 1);
+            this.groundedFrames = Math.max(0, this.groundedFrames - 1);
         }
 
         // Track jump button release
@@ -1593,13 +1597,19 @@ class GameScene extends Phaser.Scene {
             this.isJumping = false;
         }
 
-        // Mario physics: Faster falling (higher gravity when going down)
-        if (this.player.body.velocity.y > 0) {
-            // Falling - apply extra gravity for snappier feel
-            this.player.body.velocity.y += 40;
-        } else if (this.player.body.velocity.y < 0 && !this.spaceKey.isDown) {
-            // Rising but not holding jump - fall faster
-            this.player.body.velocity.y += 25;
+        // Mario physics: Faster falling - ONLY when truly in the air
+        // Use groundedFrames to prevent jitter right after landing
+        const isStableOnGround = isOnGround || this.groundedFrames > 0;
+        if (!isStableOnGround) {
+            const maxFallSpeed = 600;
+            if (this.player.body.velocity.y > 0) {
+                this.player.body.velocity.y += 8;
+                if (this.player.body.velocity.y > maxFallSpeed) {
+                    this.player.body.velocity.y = maxFallSpeed;
+                }
+            } else if (this.player.body.velocity.y < 0 && !this.spaceKey.isDown) {
+                this.player.body.velocity.y += 5;
+            }
         }
 
         // Flip sprite
