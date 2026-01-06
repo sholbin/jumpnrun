@@ -320,6 +320,9 @@ class GameScene extends Phaser.Scene {
         this.isInvincible = false;
         this.fallTimer = 0;
         this.highScore = parseInt(localStorage.getItem('superNoeHighScore') || '0');
+        // Leaderboard - stores top 10 scores with player names
+        this.leaderboard = this.loadLeaderboard();
+        this.playerName = localStorage.getItem('superNoePlayerName') || '';
         // Level tracking
         this.currentLevel = parseInt(localStorage.getItem('superNoeCurrentLevel') || '0');
         // Checkpoint and finish line
@@ -352,6 +355,32 @@ class GameScene extends Phaser.Scene {
     // Get current level data
     getLevelData() {
         return LEVELS[this.currentLevel] || LEVELS[0];
+    }
+
+    // Leaderboard functions
+    loadLeaderboard() {
+        try {
+            const data = localStorage.getItem('superNoeLeaderboard');
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    saveLeaderboard() {
+        localStorage.setItem('superNoeLeaderboard', JSON.stringify(this.leaderboard));
+    }
+
+    addToLeaderboard(name, score) {
+        this.leaderboard.push({ name, score, date: new Date().toLocaleDateString() });
+        this.leaderboard.sort((a, b) => b.score - a.score);
+        this.leaderboard = this.leaderboard.slice(0, 10); // Keep top 10
+        this.saveLeaderboard();
+    }
+
+    isHighScore(score) {
+        if (this.leaderboard.length < 10) return true;
+        return score > this.leaderboard[this.leaderboard.length - 1].score;
     }
 
     create() {
@@ -416,6 +445,7 @@ class GameScene extends Phaser.Scene {
         this.rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
         this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
         this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+        this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L);
 
         // UI
         this.createUI();
@@ -519,6 +549,47 @@ class GameScene extends Phaser.Scene {
         g.fillCircle(55, 28, 3);
 
         g.generateTexture('grass_platform', w, h);
+        g.destroy();
+    }
+
+    generateCapTexture() {
+        const g = this.make.graphics();
+        const w = 70, h = 35;
+
+        // Baseball cap - socialist red
+        // Main cap body
+        g.fillStyle(0xc62828, 1);
+        g.fillEllipse(30, 18, 50, 28);
+
+        // Cap crown panels (darker seams)
+        g.lineStyle(1, 0x8e0000, 0.5);
+        g.lineBetween(20, 5, 25, 28);
+        g.lineBetween(30, 3, 30, 28);
+        g.lineBetween(40, 5, 35, 28);
+
+        // Brim (curved, extends forward)
+        g.fillStyle(0xb71c1c, 1);
+        g.beginPath();
+        g.moveTo(45, 22);
+        g.lineTo(68, 28);
+        g.lineTo(65, 34);
+        g.lineTo(42, 30);
+        g.closePath();
+        g.fillPath();
+
+        // Brim edge highlight
+        g.lineStyle(2, 0x7f0000, 1);
+        g.lineBetween(45, 22, 68, 28);
+
+        // Top button
+        g.fillStyle(0x7f0000, 1);
+        g.fillCircle(30, 6, 4);
+
+        // Shine/highlight
+        g.fillStyle(0xe57373, 0.4);
+        g.fillEllipse(25, 12, 16, 10);
+
+        g.generateTexture('red_cap', w, h);
         g.destroy();
     }
 
@@ -692,8 +763,25 @@ class GameScene extends Phaser.Scene {
 
             this.time.delayedCall(1500, () => {
                 this.lives = 3;
-                this.score = 0;
-                this.scene.restart();
+                // Respawn at checkpoint if activated, otherwise restart level
+                if (this.checkpointActivated) {
+                    // Keep checkpoint, respawn there
+                    this.physics.resume();
+                    player.clearTint();
+                    player.setPosition(this.respawnX, this.respawnY);
+                    player.setVelocity(0, 0);
+                    this.isInvincible = true;
+                    player.setAlpha(0.6);
+                    this.time.delayedCall(1500, () => {
+                        this.isInvincible = false;
+                        player.setAlpha(1);
+                    });
+                    this.updateUI();
+                } else {
+                    // No checkpoint - full restart
+                    this.score = 0;
+                    this.scene.restart();
+                }
             });
         } else {
             // Temporary invincibility
@@ -737,9 +825,19 @@ class GameScene extends Phaser.Scene {
 
         this.highScoreText = this.add.text(20, 110, `High: ${this.highScore}`, { ...textStyle, fontSize: '18px', fill: '#ffd700' }).setScrollFactor(0);
 
+        // Leaderboard button (top right, below level)
+        const lbBtn = this.add.text(width - 20, 50, '🏆 Leaderboard', {
+            ...textStyle,
+            fontSize: '16px',
+            fill: '#ffd700',
+            backgroundColor: '#333',
+            padding: { x: 8, y: 4 }
+        }).setScrollFactor(0).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+        lbBtn.on('pointerdown', () => this.showLeaderboard());
+
         // PC Hint
         if (!this.isMobile) {
-            this.add.text(20, 80, '[R] Reset  [P] Pause', { ...textStyle, fontSize: '14px', fill: '#aaa' }).setScrollFactor(0);
+            this.add.text(20, 80, '[R] Reset  [P] Pause  [L] Leaderboard', { ...textStyle, fontSize: '14px', fill: '#aaa' }).setScrollFactor(0);
         }
 
         this.updateUI();
@@ -787,26 +885,24 @@ class GameScene extends Phaser.Scene {
 
         const { width, height } = this.scale;
 
-        // Create pause menu container at screen center (not camera-relative)
-        // Container at (0,0) with scrollFactor(0) means it's viewport-fixed
-        this.pauseMenu = this.add.container(0, 0);
-        this.pauseMenu.setScrollFactor(0);
-        this.pauseMenu.setDepth(2000);
+        // Store all pause menu elements for cleanup (no container - fixes input issues)
+        this.pauseMenuElements = [];
 
-        // Dark overlay - covers entire viewport, positioned at viewport center
-        // Using very large size to ensure full coverage regardless of any edge cases
+        // Dark overlay - covers entire viewport
         const overlay = this.add.rectangle(width / 2, height / 2, width * 3, height * 3, 0x000000, 0.8);
-        this.pauseMenu.add(overlay);
+        overlay.setScrollFactor(0);
+        overlay.setDepth(1999);
+        this.pauseMenuElements.push(overlay);
 
-        // Pause title - positioned at viewport center
+        // Pause title
         const pauseTitle = this.add.text(width / 2, height / 2 - 100, 'PAUSED', {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '48px',
             fill: '#ffffff',
             stroke: '#000',
             strokeThickness: 6
-        }).setOrigin(0.5);
-        this.pauseMenu.add(pauseTitle);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(2000);
+        this.pauseMenuElements.push(pauseTitle);
 
         // Menu buttons
         const buttonStyle = {
@@ -822,15 +918,19 @@ class GameScene extends Phaser.Scene {
         // Resume button
         const resumeBtn = this.add.text(width / 2, height / 2 - 20, '  Resume  ', buttonStyle)
             .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(2000)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => resumeBtn.setStyle({ fill: '#88ff88' }))
             .on('pointerout', () => resumeBtn.setStyle({ fill: '#ffffff' }))
             .on('pointerdown', () => this.resumeGame());
-        this.pauseMenu.add(resumeBtn);
+        this.pauseMenuElements.push(resumeBtn);
 
         // Restart Level button
         const restartBtn = this.add.text(width / 2, height / 2 + 40, 'Restart Level', buttonStyle)
             .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(2000)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => restartBtn.setStyle({ fill: '#ffff88' }))
             .on('pointerout', () => restartBtn.setStyle({ fill: '#ffffff' }))
@@ -841,11 +941,13 @@ class GameScene extends Phaser.Scene {
                 this.respawnY = 100;
                 this.scene.restart();
             });
-        this.pauseMenu.add(restartBtn);
+        this.pauseMenuElements.push(restartBtn);
 
         // Back to Title button
         const titleBtn = this.add.text(width / 2, height / 2 + 100, ' Main Menu ', buttonStyle)
             .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(2000)
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => titleBtn.setStyle({ fill: '#ff8888' }))
             .on('pointerout', () => titleBtn.setStyle({ fill: '#ffffff' }))
@@ -853,7 +955,7 @@ class GameScene extends Phaser.Scene {
                 this.isPaused = false;
                 this.scene.start('TitleScene');
             });
-        this.pauseMenu.add(titleBtn);
+        this.pauseMenuElements.push(titleBtn);
 
         // Hint text
         const hintText = this.isMobile ? 'Tap Resume to continue' : 'Press P or ESC to resume';
@@ -861,18 +963,178 @@ class GameScene extends Phaser.Scene {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '16px',
             fill: '#aaaaaa'
-        }).setOrigin(0.5);
-        this.pauseMenu.add(hint);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(2000);
+        this.pauseMenuElements.push(hint);
     }
 
     resumeGame() {
         this.isPaused = false;
         this.physics.resume();
 
-        if (this.pauseMenu) {
-            this.pauseMenu.destroy();
-            this.pauseMenu = null;
+        // Clean up all pause menu elements
+        if (this.pauseMenuElements) {
+            this.pauseMenuElements.forEach(el => el.destroy());
+            this.pauseMenuElements = null;
         }
+    }
+
+    showLeaderboard() {
+        if (this.leaderboardElements) return; // Already showing
+
+        this.isPaused = true;
+        this.physics.pause();
+
+        const { width, height } = this.scale;
+        this.leaderboardElements = [];
+
+        // Dark overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width * 3, height * 3, 0x000000, 0.85);
+        overlay.setScrollFactor(0).setDepth(2999);
+        this.leaderboardElements.push(overlay);
+
+        // Title
+        const title = this.add.text(width / 2, 60, '🏆 LEADERBOARD 🏆', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '36px',
+            fill: '#ffd700',
+            stroke: '#000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+        this.leaderboardElements.push(title);
+
+        // Leaderboard entries
+        const startY = 120;
+        const lineHeight = 35;
+
+        if (this.leaderboard.length === 0) {
+            const noScores = this.add.text(width / 2, height / 2, 'No scores yet!\nBe the first!', {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '24px',
+                fill: '#aaa',
+                align: 'center'
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+            this.leaderboardElements.push(noScores);
+        } else {
+            this.leaderboard.forEach((entry, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+                const color = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ffffff';
+
+                const row = this.add.text(width / 2, startY + i * lineHeight,
+                    `${medal} ${entry.name.substring(0, 12).padEnd(12)} ${String(entry.score).padStart(6)}`, {
+                    fontFamily: 'monospace',
+                    fontSize: '22px',
+                    fill: color,
+                    stroke: '#000',
+                    strokeThickness: 3
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+                this.leaderboardElements.push(row);
+            });
+        }
+
+        // Close button
+        const closeBtn = this.add.text(width / 2, height - 80, '[ Close ]', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '24px',
+            fill: '#88ff88',
+            stroke: '#000',
+            strokeThickness: 4,
+            backgroundColor: '#333',
+            padding: { x: 20, y: 10 }
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(3000)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => this.hideLeaderboard());
+        this.leaderboardElements.push(closeBtn);
+    }
+
+    hideLeaderboard() {
+        if (this.leaderboardElements) {
+            this.leaderboardElements.forEach(el => el.destroy());
+            this.leaderboardElements = null;
+        }
+        this.isPaused = false;
+        this.physics.resume();
+    }
+
+    promptForName(callback) {
+        const { width, height } = this.scale;
+        this.nameEntryElements = [];
+
+        // Overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width * 3, height * 3, 0x000000, 0.9);
+        overlay.setScrollFactor(0).setDepth(3999);
+        this.nameEntryElements.push(overlay);
+
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 100, '🎉 NEW HIGH SCORE! 🎉', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '32px',
+            fill: '#ffd700',
+            stroke: '#000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(4000);
+        this.nameEntryElements.push(title);
+
+        const scoreText = this.add.text(width / 2, height / 2 - 50, `Score: ${this.score}`, {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '28px',
+            fill: '#ffffff',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(4000);
+        this.nameEntryElements.push(scoreText);
+
+        // Create HTML input for name entry
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Enter your name';
+        input.maxLength = 12;
+        input.value = this.playerName;
+        input.style.cssText = `
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            padding: 10px 20px;
+            border: 3px solid #ffd700;
+            border-radius: 8px;
+            background: #333;
+            color: #fff;
+            text-align: center;
+            width: 200px;
+            z-index: 9999;
+        `;
+        document.body.appendChild(input);
+        input.focus();
+
+        const submitBtn = this.add.text(width / 2, height / 2 + 80, '[ Submit Score ]', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '24px',
+            fill: '#88ff88',
+            stroke: '#000',
+            strokeThickness: 4,
+            backgroundColor: '#333',
+            padding: { x: 20, y: 10 }
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(4000)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => {
+                const name = input.value.trim() || 'Player';
+                this.playerName = name;
+                localStorage.setItem('superNoePlayerName', name);
+                this.addToLeaderboard(name, this.score);
+                input.remove();
+                this.nameEntryElements.forEach(el => el.destroy());
+                this.nameEntryElements = null;
+                callback();
+            });
+        this.nameEntryElements.push(submitBtn);
+
+        // Also submit on Enter key
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                submitBtn.emit('pointerdown');
+            }
+        });
     }
 
     generateCoinTexture() {
@@ -1034,15 +1296,26 @@ class GameScene extends Phaser.Scene {
 
     createAnimatedPlayer(width, height) {
         // Create player using atlas frame
-        this.player = this.physics.add.sprite(100, height - 150, 'noe_atlas', 'idle');
+        const groundY = height - 20;
+        this.player = this.physics.add.sprite(100, groundY - 50, 'noe_atlas', 'idle');
         // Scale down ~240px tall sprite to ~48px (0.2 scale)
         this.player.setScale(0.2);
         this.player.setBounce(0); // No bounce - prevents double landing and ground instability
         this.player.setCollideWorldBounds(false);
 
         // Hitbox for scaled character
-        this.player.body.setSize(100, 180);
-        this.player.body.setOffset(16, 60);
+        // Body positioned so feet align with bottom of collision box
+        this.player.body.setSize(80, 200);
+        this.player.body.setOffset(25, 40); // Feet at ground level
+
+        // Ensure gravity is applied
+        this.player.body.setGravityY(200); // Additional gravity for snappier feel
+
+        // Generate and add red baseball cap
+        this.generateCapTexture();
+        this.playerCap = this.add.image(0, 0, 'red_cap');
+        this.playerCap.setScale(0.22);
+        this.playerCap.setDepth(this.player.depth + 1);
 
         // Create animations from atlas frames
         this.anims.create({
@@ -1264,32 +1537,28 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    // Player squash effect on landing
+    // Player squash effect on landing - visual only, doesn't affect physics
+    // We use alpha flash instead of scale to avoid physics body size changes
     squashPlayer() {
-        if (this.landSquashTween) {
-            this.landSquashTween.stop();
-        }
-
-        this.landSquashTween = this.tweens.add({
+        // Quick brightness flash instead of scale squash (scale affects physics body)
+        this.tweens.add({
             targets: this.player,
-            scaleX: 0.25,
-            scaleY: 0.16,
-            duration: 80,
+            alpha: 0.7,
+            duration: 50,
             yoyo: true,
             ease: 'Power2'
         });
     }
 
-    // Player stretch effect during jump
+    // Player stretch effect during jump - disabled to prevent physics issues
     stretchPlayer() {
-        this.player.setScale(0.18, 0.23);
+        // Disabled - scale changes affect physics body and cause ground clipping
     }
 
     // Reset player scale
     resetPlayerScale() {
-        if (!this.landSquashTween || !this.landSquashTween.isPlaying()) {
-            this.player.setScale(0.2);
-        }
+        // Keep scale constant at 0.2 to prevent physics body size changes
+        this.player.setScale(0.2);
     }
 
     // Pulse hearts animation on damage
@@ -1440,6 +1709,16 @@ class GameScene extends Phaser.Scene {
             return;
         }
 
+        // Leaderboard toggle (L key)
+        if (this.lKey && Phaser.Input.Keyboard.JustDown(this.lKey)) {
+            if (this.leaderboardElements) {
+                this.hideLeaderboard();
+            } else {
+                this.showLeaderboard();
+            }
+            return;
+        }
+
         // Don't process game logic while paused
         if (this.isPaused) return;
 
@@ -1459,8 +1738,25 @@ class GameScene extends Phaser.Scene {
                 this.lives--;
                 this.updateUI();
                 this.playSound('hurt');
+
                 if (this.lives <= 0) {
-                    this.scene.restart();
+                    this.lives = 3;
+                    if (this.checkpointActivated) {
+                        // Respawn at checkpoint
+                        this.player.setPosition(this.respawnX, this.respawnY);
+                        this.player.setVelocity(0, 0);
+                        this.isInvincible = true;
+                        this.player.setAlpha(0.6);
+                        this.time.delayedCall(1500, () => {
+                            this.isInvincible = false;
+                            this.player.setAlpha(1);
+                        });
+                        this.updateUI();
+                    } else {
+                        // No checkpoint - full restart
+                        this.score = 0;
+                        this.scene.restart();
+                    }
                 } else {
                     // Respawn at checkpoint or start
                     this.player.setPosition(this.respawnX, this.respawnY);
@@ -1660,6 +1956,13 @@ class GameScene extends Phaser.Scene {
                     : this.player.x + 15;
                 this.emitDust(dustX, this.player.y + 15, 2);
             }
+        }
+
+        // Update cap position to follow player's head
+        if (this.playerCap) {
+            const capOffsetX = this.lastDirection === 'right' ? 2 : -2;
+            this.playerCap.setPosition(this.player.x + capOffsetX, this.player.y - 18);
+            this.playerCap.setFlipX(this.lastDirection === 'left');
         }
 
         // Enemy Patrol Logic
@@ -2005,17 +2308,26 @@ class GameScene extends Phaser.Scene {
                 this.respawnY = 100;
 
                 if (isLastLevel) {
-                    // Game complete - reset to level 0
-                    this.currentLevel = 0;
-                    this.score = 0;
-                    localStorage.setItem('superNoeCurrentLevel', '0');
+                    // Game complete - check for high score
+                    if (this.isHighScore(this.score)) {
+                        this.promptForName(() => {
+                            this.currentLevel = 0;
+                            this.score = 0;
+                            localStorage.setItem('superNoeCurrentLevel', '0');
+                            this.scene.restart();
+                        });
+                    } else {
+                        this.currentLevel = 0;
+                        this.score = 0;
+                        localStorage.setItem('superNoeCurrentLevel', '0');
+                        this.scene.restart();
+                    }
                 } else {
                     // Advance to next level (keep score!)
                     this.currentLevel++;
                     localStorage.setItem('superNoeCurrentLevel', this.currentLevel.toString());
+                    this.scene.restart();
                 }
-
-                this.scene.restart();
             };
 
             this.input.once('pointerdown', advanceLevel);
