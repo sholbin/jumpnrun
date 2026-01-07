@@ -2077,7 +2077,7 @@ class GameScene extends Phaser.Scene {
                 this.isGroundPounding = false;
                 this.groundPoundTimer = 0;
                 this.player.setRotation(0);
-                this.resetPlayerScale();
+                this.player.setAlpha(1);
             }
         }
 
@@ -2085,9 +2085,8 @@ class GameScene extends Phaser.Scene {
         if (isOnGround && this.isGroundPounding) {
             this.isGroundPounding = false;
             this.groundPoundTimer = 0;
-            // Reset rotation and scale from ass bomb pose
+            // Reset rotation and alpha from ass bomb pose
             this.player.setRotation(0);
-            this.resetPlayerScale();
             // BIG landing impact effect
             this.shakeCamera(0.02, 200);
             if (this.dustEmitter) {
@@ -2096,10 +2095,14 @@ class GameScene extends Phaser.Scene {
                 this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 10);
                 this.dustEmitter.emitParticleAt(this.player.x + 20, this.player.y + 20, 8);
             }
-            // Extra squash on landing for comedic effect
-            this.player.setScale(1.6, 0.5);
-            this.time.delayedCall(150, () => {
-                if (!this.isGroundPounding) this.resetPlayerScale();
+            // Flash on landing for comedic effect (no scaling - breaks physics!)
+            this.player.setAlpha(1);
+            this.tweens.add({
+                targets: this.player,
+                alpha: 0.5,
+                duration: 80,
+                yoyo: true,
+                ease: 'Power2'
             });
             this.playSound('land');
         }
@@ -2122,14 +2125,14 @@ class GameScene extends Phaser.Scene {
         // Flip sprite
         this.player.setFlipX(this.lastDirection === 'left');
 
-        // Ground pound "ass bomb" pose - rotate and squash for funny look
+        // Ground pound "ass bomb" pose - rotation only (scaling breaks physics!)
         if (this.isGroundPounding) {
             // Wobbling spin while falling butt-first - looks hilarious!
-            const wobble = Math.sin(this.groundPoundTimer * 0.03) * 0.3;
-            this.player.setRotation(Math.PI + wobble); // Upside down with wobble!
-            // Pulsing squash for extra silliness
-            const pulse = 1 + Math.sin(this.groundPoundTimer * 0.02) * 0.15;
-            this.player.setScale(1.4 * pulse, 0.6 / pulse);
+            const wobble = Math.sin(this.groundPoundTimer * 0.03) * 0.4;
+            const spin = Math.sin(this.groundPoundTimer * 0.015) * 0.5;
+            this.player.setRotation(Math.PI + wobble + spin); // Upside down with crazy wobble!
+            // Flashing alpha for extra effect instead of scaling
+            this.player.setAlpha(0.8 + Math.sin(this.groundPoundTimer * 0.05) * 0.2);
         }
         // Sprint leaning
         else if (isMoving && this.isSprinting && this.player.body.touching.down) {
