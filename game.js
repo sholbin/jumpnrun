@@ -411,12 +411,12 @@ class GameScene extends Phaser.Scene {
     addToLeaderboard(name, score) {
         this.leaderboard.push({ name, score, date: new Date().toLocaleDateString() });
         this.leaderboard.sort((a, b) => b.score - a.score);
-        this.leaderboard = this.leaderboard.slice(0, 10); // Keep top 10
+        this.leaderboard = this.leaderboard.slice(0, 5); // Keep top 5
         this.saveLeaderboard();
     }
 
     isHighScore(score) {
-        if (this.leaderboard.length < 10) return true;
+        if (this.leaderboard.length < 5) return true;
         return score > this.leaderboard[this.leaderboard.length - 1].score;
     }
 
@@ -832,9 +832,16 @@ class GameScene extends Phaser.Scene {
                     });
                     this.updateUI();
                 } else {
-                    // No checkpoint - full restart
-                    this.score = 0;
-                    this.scene.restart();
+                    // No checkpoint - game over, check for high score before restart
+                    if (this.isHighScore(this.score)) {
+                        this.promptForName(() => {
+                            this.score = 0;
+                            this.scene.restart();
+                        });
+                    } else {
+                        this.score = 0;
+                        this.scene.restart();
+                    }
                 }
             });
         } else {
@@ -1765,12 +1772,10 @@ class GameScene extends Phaser.Scene {
         const canJump = this.player.body.touching.down || this.coyoteTime > 0;
 
         if (canJump && this.jumpReleased) {
-            // Sprint jump: higher and more horizontal momentum
+            // Sprint jump: slightly higher but no horizontal boost (prevents flying)
             if (this.isSprinting) {
-                this.player.setVelocityY(-650); // Higher jump
-                // Boost horizontal velocity in sprint direction
-                const boostDir = this.lastDirection === 'right' ? 1 : -1;
-                this.player.setVelocityX(this.player.body.velocity.x + boostDir * 100);
+                this.player.setVelocityY(-600); // Slightly higher than normal
+                // No horizontal boost - prevents the "flying" effect
             } else {
                 this.player.setVelocityY(-580); // Normal jump - snappier
             }
@@ -1831,8 +1836,16 @@ class GameScene extends Phaser.Scene {
                         this.player.setVelocity(0, 0);
                         this.updateUI();
                     } else {
-                        this.score = 0;
-                        this.scene.restart();
+                        // Game over - check for high score before restart
+                        if (this.isHighScore(this.score)) {
+                            this.promptForName(() => {
+                                this.score = 0;
+                                this.scene.restart();
+                            });
+                        } else {
+                            this.score = 0;
+                            this.scene.restart();
+                        }
                         return;
                     }
                 } else {
@@ -1896,9 +1909,16 @@ class GameScene extends Phaser.Scene {
                         });
                         this.updateUI();
                     } else {
-                        // No checkpoint - full restart
-                        this.score = 0;
-                        this.scene.restart();
+                        // No checkpoint - game over, check for high score before restart
+                        if (this.isHighScore(this.score)) {
+                            this.promptForName(() => {
+                                this.score = 0;
+                                this.scene.restart();
+                            });
+                        } else {
+                            this.score = 0;
+                            this.scene.restart();
+                        }
                     }
                 } else {
                     // Respawn at checkpoint or start
@@ -1994,11 +2014,10 @@ class GameScene extends Phaser.Scene {
                 this.jumpBufferTime = 6; // Buffer jump input for 6 frames
             }
             if (this.jumpBufferTime > 0 && (isOnGround || this.coyoteTime > 0) && this.jumpReleased) {
-                // Sprint jump: higher and more horizontal momentum
+                // Sprint jump: slightly higher but no horizontal boost (prevents flying)
                 if (this.isSprinting) {
-                    this.player.setVelocityY(-650);
-                    const boostDir = this.lastDirection === 'right' ? 1 : -1;
-                    this.player.setVelocityX(this.player.body.velocity.x + boostDir * 100);
+                    this.player.setVelocityY(-600);
+                    // No horizontal boost - prevents the "flying" effect
                 } else {
                     this.player.setVelocityY(-580);
                 }
