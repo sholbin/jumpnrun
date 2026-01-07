@@ -961,10 +961,10 @@ class GameScene extends Phaser.Scene {
                     });
                     this.updateUI();
                 } else {
-                    // If in secret level (4), reset to level 1
+                    // If in secret level (4), reset to level 3
                     if (this.currentLevel === 3) {
-                        this.currentLevel = 0;
-                        localStorage.setItem('superNoeCurrentLevel', '0');
+                        this.currentLevel = 2;
+                        localStorage.setItem('superNoeCurrentLevel', '2');
                     }
                     // No checkpoint - game over, check for high score before restart
                     if (this.isHighScore(this.score)) {
@@ -2051,10 +2051,10 @@ class GameScene extends Phaser.Scene {
                         this.player.setVelocity(0, 0);
                         this.updateUI();
                     } else {
-                        // If in secret level (4), reset to level 1
+                        // If in secret level (4), reset to level 3
                         if (this.currentLevel === 3) {
-                            this.currentLevel = 0;
-                            localStorage.setItem('superNoeCurrentLevel', '0');
+                            this.currentLevel = 2;
+                            localStorage.setItem('superNoeCurrentLevel', '2');
                         }
                         // Game over - check for high score before restart
                         if (this.isHighScore(this.score)) {
@@ -2148,10 +2148,10 @@ class GameScene extends Phaser.Scene {
                         });
                         this.updateUI();
                     } else {
-                        // If in secret level (4), reset to level 1
+                        // If in secret level (4), reset to level 3
                         if (this.currentLevel === 3) {
-                            this.currentLevel = 0;
-                            localStorage.setItem('superNoeCurrentLevel', '0');
+                            this.currentLevel = 2;
+                            localStorage.setItem('superNoeCurrentLevel', '2');
                         }
                         // No checkpoint - game over, check for high score before restart
                         if (this.isHighScore(this.score)) {
@@ -2837,8 +2837,8 @@ class GameScene extends Phaser.Scene {
         const groundY = height - 20;
 
         // Create the MASSIVE boss (10x player size!)
-        this.boss = this.physics.add.sprite(width * level.boss.xMult, groundY - 200, 'boss');
-        this.boss.setScale(8); // HUGE - 10x bigger than before
+        this.boss = this.physics.add.sprite(width * level.boss.xMult, groundY - 400, 'boss');
+        this.boss.setScale(6); // HUGE boss
         this.boss.setBounce(0);
         this.boss.setCollideWorldBounds(true);
         this.boss.body.setSize(60, 70);
@@ -3045,11 +3045,11 @@ class GameScene extends Phaser.Scene {
                 });
 
                 if (this.lives <= 0) {
-                    // Handle death - reset to level 1 from secret level
+                    // Handle death - reset to level 3 from secret level
                     this.lives = 3;
                     if (this.currentLevel === 3) {
-                        this.currentLevel = 0;
-                        localStorage.setItem('superNoeCurrentLevel', '0');
+                        this.currentLevel = 2;
+                        localStorage.setItem('superNoeCurrentLevel', '2');
                     }
                     this.score = 0;
                     this.scene.restart();
