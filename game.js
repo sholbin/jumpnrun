@@ -2831,9 +2831,9 @@ class GameScene extends Phaser.Scene {
 
         const groundY = height - 20;
 
-        // Create the boss
-        this.boss = this.physics.add.sprite(width * level.boss.xMult, groundY - 60, 'boss');
-        this.boss.setScale(1.5);
+        // Create the MASSIVE boss (10x player size!)
+        this.boss = this.physics.add.sprite(width * level.boss.xMult, groundY - 200, 'boss');
+        this.boss.setScale(8); // HUGE - 10x bigger than before
         this.boss.setBounce(0);
         this.boss.setCollideWorldBounds(true);
         this.boss.body.setSize(60, 70);
@@ -2844,37 +2844,146 @@ class GameScene extends Phaser.Scene {
         this.bossDefeated = false;
         this.bossDirection = -1;
         this.bossAttackTimer = 0;
+        this.bossIntroPlayed = false;
+        this.bossActive = false; // Boss doesn't move until intro plays
 
         // Boss collides with platforms
         this.physics.add.collider(this.boss, this.platforms);
 
-        // Player-boss collision
+        // Player-boss collision - only active after intro
         this.physics.add.overlap(this.player, this.boss, this.hitBoss, null, this);
 
-        // Boss health bar UI
-        this.bossNameText = this.add.text(this.scale.width / 2, 100, level.boss.name, {
+        // HIDE boss and UI initially - will appear during intro
+        this.boss.setAlpha(0);
+        this.boss.body.enable = false; // Disable physics until intro
+
+        // Boss health bar UI - HIDDEN initially
+        this.bossNameText = this.add.text(this.scale.width / 2, 80, level.boss.name, {
             fontFamily: 'Outfit, sans-serif',
-            fontSize: '24px',
+            fontSize: '36px',
             fill: '#ff4444',
             stroke: '#000',
-            strokeThickness: 4
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+            strokeThickness: 6
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setAlpha(0);
 
-        // Health bar background
-        this.bossHealthBarBg = this.add.rectangle(this.scale.width / 2, 130, 204, 24, 0x000000)
-            .setScrollFactor(0).setDepth(1000);
+        // Health bar background - larger for the big boss
+        this.bossHealthBarBg = this.add.rectangle(this.scale.width / 2, 120, 404, 30, 0x000000)
+            .setScrollFactor(0).setDepth(1000).setAlpha(0);
 
         // Health bar fill
-        this.bossHealthBar = this.add.rectangle(this.scale.width / 2, 130, 200, 20, 0xff0000)
-            .setScrollFactor(0).setDepth(1001);
+        this.bossHealthBar = this.add.rectangle(this.scale.width / 2, 120, 400, 26, 0xff0000)
+            .setScrollFactor(0).setDepth(1001).setAlpha(0);
 
-        // Entrance animation
-        this.boss.setAlpha(0);
+        // Create invisible trigger zone for boss intro
+        this.bossTriggerZone = this.add.rectangle(width * (level.boss.xMult - 0.5), groundY - 100, 100, 400, 0xff0000, 0);
+        this.physics.add.existing(this.bossTriggerZone, true);
+        this.physics.add.overlap(this.player, this.bossTriggerZone, this.triggerBossIntro, null, this);
+    }
+
+    triggerBossIntro() {
+        if (this.bossIntroPlayed || this.bossDefeated) return;
+        this.bossIntroPlayed = true;
+
+        // FREEZE the player during intro
+        this.player.setVelocity(0, 0);
+        this.player.body.enable = false;
+        this.isPaused = true;
+
+        // Dramatic screen effects
+        this.cameras.main.shake(500, 0.02);
+
+        // Dark flash
+        const darkOverlay = this.add.rectangle(this.scale.width / 2, this.scale.height / 2,
+            this.scale.width, this.scale.height, 0x000000, 0.8)
+            .setScrollFactor(0).setDepth(999);
+
+        // "BOSS APPROACHING" warning text
+        const warningText = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, '⚠ WARNING ⚠', {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '48px',
+            fill: '#ff0000',
+            stroke: '#000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1002).setAlpha(0);
+
+        // Flash the warning
         this.tweens.add({
-            targets: this.boss,
+            targets: warningText,
             alpha: 1,
-            duration: 1000,
-            ease: 'Power2'
+            duration: 200,
+            yoyo: true,
+            repeat: 3,
+            onComplete: () => {
+                warningText.destroy();
+            }
+        });
+
+        // After warning, reveal the boss name
+        this.time.delayedCall(1200, () => {
+            const bossIntroText = this.add.text(this.scale.width / 2, this.scale.height / 2,
+                '「 SHADOW KING 」', {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '64px',
+                fill: '#8800ff',
+                stroke: '#000',
+                strokeThickness: 8
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(1002).setAlpha(0);
+
+            // Dramatic reveal of boss name
+            this.tweens.add({
+                targets: bossIntroText,
+                alpha: 1,
+                scaleX: 1.2,
+                scaleY: 1.2,
+                duration: 500,
+                ease: 'Back.easeOut'
+            });
+
+            // Ground shake as boss appears
+            this.cameras.main.shake(1000, 0.03);
+            this.playSound('hurt'); // Use as impact sound
+
+            // Reveal the boss with dramatic entrance
+            this.tweens.add({
+                targets: this.boss,
+                alpha: 1,
+                duration: 1500,
+                ease: 'Power2'
+            });
+
+            // After boss appears, show HP bar and start fight
+            this.time.delayedCall(2000, () => {
+                // Fade out intro elements
+                this.tweens.add({
+                    targets: [darkOverlay, bossIntroText],
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => {
+                        darkOverlay.destroy();
+                        bossIntroText.destroy();
+                    }
+                });
+
+                // Show HP bar with dramatic reveal
+                this.tweens.add({
+                    targets: [this.bossNameText, this.bossHealthBarBg, this.bossHealthBar],
+                    alpha: 1,
+                    duration: 500,
+                    ease: 'Power2'
+                });
+
+                // Enable boss physics and player control
+                this.boss.body.enable = true;
+                this.player.body.enable = true;
+                this.isPaused = false;
+                this.bossActive = true;
+
+                // Destroy trigger zone
+                if (this.bossTriggerZone) {
+                    this.bossTriggerZone.destroy();
+                    this.bossTriggerZone = null;
+                }
+            });
         });
     }
 
@@ -3074,25 +3183,29 @@ class GameScene extends Phaser.Scene {
     }
 
     updateBoss() {
-        if (!this.boss || this.bossDefeated) return;
+        if (!this.boss || this.bossDefeated || !this.bossActive) return;
 
         // Simple AI: move back and forth and occasionally charge at player
         this.bossAttackTimer += this.game.loop.delta;
 
-        // Patrol movement
-        if (this.bossAttackTimer < 2000) {
-            this.boss.setVelocityX(this.bossDirection * 100);
+        // Patrol movement - slower for the massive boss
+        if (this.bossAttackTimer < 2500) {
+            this.boss.setVelocityX(this.bossDirection * 80);
 
             // Change direction at edges of patrol area
-            if (this.boss.x < this.scale.width * 3.8) {
+            if (this.boss.x < this.scale.width * 3.6) {
                 this.bossDirection = 1;
-            } else if (this.boss.x > this.scale.width * 4.4) {
+            } else if (this.boss.x > this.scale.width * 4.6) {
                 this.bossDirection = -1;
             }
-        } else if (this.bossAttackTimer < 3000) {
-            // Charge at player!
+        } else if (this.bossAttackTimer < 4000) {
+            // Charge at player! Terrifying when boss is huge
             const dirToPlayer = this.player.x < this.boss.x ? -1 : 1;
-            this.boss.setVelocityX(dirToPlayer * 250);
+            this.boss.setVelocityX(dirToPlayer * 200);
+            // Ground shake while charging
+            if (Math.random() < 0.1) {
+                this.cameras.main.shake(100, 0.005);
+            }
         } else {
             this.bossAttackTimer = 0;
         }
