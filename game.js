@@ -374,6 +374,7 @@ class GameScene extends Phaser.Scene {
         this.jumpBufferTime = 0; // Frames since jump was pressed (allows early jumps)
         this.isJumping = false; // Track if we're in a jump (for variable height)
         this.jumpReleased = true; // Track if jump button was released
+        this.isGroundPounding = false; // Track ground pound state
         // Ground stability - prevents physics jitter after landing
         this.groundedFrames = 0; // Frames since last confirmed ground contact
         // Timer system
@@ -2058,6 +2059,23 @@ class GameScene extends Phaser.Scene {
             this.isJumping = false;
         }
 
+        // Ground pound mechanic - press down while in air to slam down
+        if (!isOnGround && this.cursors.down.isDown && !this.isGroundPounding && this.player.body.velocity.y > -100) {
+            this.isGroundPounding = true;
+            this.player.setVelocityY(500); // Fast downward slam
+            this.player.setVelocityX(this.player.body.velocity.x * 0.3); // Reduce horizontal momentum
+        }
+
+        // Reset ground pound when landing
+        if (isOnGround && this.isGroundPounding) {
+            this.isGroundPounding = false;
+            // Landing impact effect
+            this.shakeCamera(0.005, 100);
+            if (this.dustEmitter) {
+                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 8);
+            }
+        }
+
         // Mario physics: Faster falling - ONLY when truly in the air
         // Use groundedFrames to prevent jitter right after landing
         const isStableOnGround = isOnGround || this.groundedFrames > 0;
@@ -2494,42 +2512,62 @@ class GameScene extends Phaser.Scene {
     }
 
     hitMysteryBlock(player, block) {
-        // Trigger if hitting from below OR stomping from above
+        // Trigger if hitting from below OR ground pounding from above
         const hitFromBelow = player.body.touching.up && block.body.touching.down;
-        const stompFromAbove = player.body.touching.down && block.body.touching.up && player.body.velocity.y >= 0;
+        const groundPoundFromAbove = player.body.touching.down && block.body.touching.up && this.isGroundPounding;
 
-        if ((hitFromBelow || stompFromAbove) && !block.getData('used')) {
+        if ((hitFromBelow || groundPoundFromAbove) && !block.getData('used')) {
             block.setData('used', true);
             block.setTexture('mystery_block_used');
 
             // Stop floating animation
             this.tweens.killTweensOf(block);
 
-            // Bump animation
-            this.tweens.add({
-                targets: block,
-                y: block.y - 8,
-                duration: 80,
-                yoyo: true,
-                ease: 'Power2'
-            });
-
-            // Spawn contents
-            const contents = block.getData('contents');
-            this.spawnPowerup(block.x, block.y - 30, contents);
-            this.playSound('coin'); // Use coin sound for now
+            // Different animation based on hit direction
+            if (groundPoundFromAbove) {
+                // Squash animation when stomped
+                this.tweens.add({
+                    targets: block,
+                    y: block.y + 6,
+                    duration: 80,
+                    yoyo: true,
+                    ease: 'Power2'
+                });
+                // Spawn contents below the block
+                const contents = block.getData('contents');
+                this.spawnPowerup(block.x, block.y + 40, contents, true); // true = drop down
+            } else {
+                // Bump animation when hit from below
+                this.tweens.add({
+                    targets: block,
+                    y: block.y - 8,
+                    duration: 80,
+                    yoyo: true,
+                    ease: 'Power2'
+                });
+                // Spawn contents above the block
+                const contents = block.getData('contents');
+                this.spawnPowerup(block.x, block.y - 30, contents, false);
+            }
+            this.playSound('coin');
         }
     }
 
-    spawnPowerup(x, y, type) {
+    spawnPowerup(x, y, type, dropDown = false) {
         let powerup;
 
         if (type === 'coins') {
             // Spawn 5 coins
             for (let i = 0; i < 5; i++) {
-                const coin = this.coins.create(x + (i - 2) * 20, y - 20, 'coin');
+                const coin = this.coins.create(x + (i - 2) * 20, y, 'coin');
                 coin.setBounce(0.5);
-                coin.setVelocityY(-200 - Math.random() * 100);
+                if (dropDown) {
+                    // Coins fall down when block is stomped
+                    coin.setVelocityY(100 + Math.random() * 100);
+                } else {
+                    // Coins pop up when block is hit from below
+                    coin.setVelocityY(-200 - Math.random() * 100);
+                }
                 coin.setVelocityX((i - 2) * 40);
             }
             return;
@@ -2544,7 +2582,14 @@ class GameScene extends Phaser.Scene {
         powerup = this.powerups.create(x, y, textureMap[type]);
         powerup.setData('type', type);
         powerup.setBounce(0.4);
-        powerup.setVelocityY(-150);
+
+        if (dropDown) {
+            // Items fall down when block is stomped
+            powerup.setVelocityY(100);
+        } else {
+            // Items pop up when block is hit from below
+            powerup.setVelocityY(-150);
+        }
 
         // Mushroom and star move sideways
         if (type === 'mushroom' || type === 'star') {
@@ -2556,7 +2601,7 @@ class GameScene extends Phaser.Scene {
             powerup.body.setAllowGravity(false);
             this.tweens.add({
                 targets: powerup,
-                y: y - 20,
+                y: y + (dropDown ? 20 : -20),
                 duration: 1000,
                 yoyo: true,
                 repeat: -1,
