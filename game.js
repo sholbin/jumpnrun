@@ -1126,8 +1126,11 @@ class GameScene extends Phaser.Scene {
             this.leaderboardElements.forEach(el => el.destroy());
             this.leaderboardElements = null;
         }
-        this.isPaused = false;
-        this.physics.resume();
+        // Only unpause if pause menu is not showing
+        if (!this.pauseMenuElements) {
+            this.isPaused = false;
+            this.physics.resume();
+        }
     }
 
     promptForName(callback) {
@@ -1448,9 +1451,9 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
         this.cameras.main.setDeadzone(120, 80);
 
-        // World bounds based on level length
+        // World bounds based on level length (start at 0 to prevent falling off left side)
         const level = this.getLevelData();
-        this.physics.world.setBounds(-200, 0, width * level.worldLength, height);
+        this.physics.world.setBounds(0, 0, width * level.worldLength, height);
     }
 
     // ============================================
@@ -2491,8 +2494,11 @@ class GameScene extends Phaser.Scene {
     }
 
     hitMysteryBlock(player, block) {
-        // Only trigger if hitting from below
-        if (player.body.touching.up && block.body.touching.down && !block.getData('used')) {
+        // Trigger if hitting from below OR stomping from above
+        const hitFromBelow = player.body.touching.up && block.body.touching.down;
+        const stompFromAbove = player.body.touching.down && block.body.touching.up && player.body.velocity.y >= 0;
+
+        if ((hitFromBelow || stompFromAbove) && !block.getData('used')) {
             block.setData('used', true);
             block.setTexture('mystery_block_used');
 
