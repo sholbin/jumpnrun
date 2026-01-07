@@ -1395,7 +1395,7 @@ class GameScene extends Phaser.Scene {
         // Scale down ~240px tall sprite to ~48px (0.2 scale)
         this.player.setScale(0.2);
         this.player.setBounce(0); // No bounce - prevents double landing and ground instability
-        this.player.setCollideWorldBounds(false);
+        this.player.setCollideWorldBounds(true);
 
         // Hitbox for scaled character
         // Body positioned so feet align with bottom of collision box
@@ -1454,8 +1454,9 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.setDeadzone(120, 80);
 
         // World bounds based on level length (start at 0 to prevent falling off left side)
+        // Bottom extends way below screen so player can fall into pits
         const level = this.getLevelData();
-        this.physics.world.setBounds(0, 0, width * level.worldLength, height);
+        this.physics.world.setBounds(0, 0, width * level.worldLength, height + 500);
     }
 
     // ============================================
