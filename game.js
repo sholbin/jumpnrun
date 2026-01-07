@@ -2069,11 +2069,19 @@ class GameScene extends Phaser.Scene {
         // Reset ground pound when landing
         if (isOnGround && this.isGroundPounding) {
             this.isGroundPounding = false;
-            // Landing impact effect
-            this.shakeCamera(0.005, 100);
+            // Reset rotation and scale from ass bomb pose
+            this.player.setRotation(0);
+            this.resetPlayerScale();
+            // Big landing impact effect
+            this.shakeCamera(0.01, 150);
             if (this.dustEmitter) {
-                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 8);
+                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 12);
             }
+            // Extra squash on landing for comedic effect
+            this.player.setScale(1.4, 0.6);
+            this.time.delayedCall(100, () => {
+                if (!this.isGroundPounding) this.resetPlayerScale();
+            });
         }
 
         // Mario physics: Faster falling - ONLY when truly in the air
@@ -2094,15 +2102,25 @@ class GameScene extends Phaser.Scene {
         // Flip sprite
         this.player.setFlipX(this.lastDirection === 'left');
 
+        // Ground pound "ass bomb" pose - rotate and squash for funny look
+        if (this.isGroundPounding) {
+            // Rotate to look like sitting/butt bomb position
+            this.player.setRotation(Math.PI); // Flip upside down (butt first!)
+            // Squash horizontally, stretch vertically for comical effect
+            this.player.setScale(1.3, 0.7);
+        }
         // Sprint leaning
-        if (isMoving && this.isSprinting && this.player.body.touching.down) {
+        else if (isMoving && this.isSprinting && this.player.body.touching.down) {
             this.player.setRotation(this.lastDirection === 'left' ? -0.2 : 0.2);
         } else {
             this.player.setRotation(0);
         }
 
         // Animations
-        if (!this.player.body.touching.down) {
+        if (this.isGroundPounding) {
+            // Keep jump frame during ground pound
+            this.player.anims.play('jump', true);
+        } else if (!this.player.body.touching.down) {
             this.player.anims.play('jump', true);
             // Stretch player during jump ascent
             if (this.player.body.velocity.y < -100) {
