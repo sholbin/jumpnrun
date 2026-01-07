@@ -411,12 +411,12 @@ class GameScene extends Phaser.Scene {
     addToLeaderboard(name, score) {
         this.leaderboard.push({ name, score, date: new Date().toLocaleDateString() });
         this.leaderboard.sort((a, b) => b.score - a.score);
-        this.leaderboard = this.leaderboard.slice(0, 5); // Keep top 5
+        this.leaderboard = this.leaderboard.slice(0, 3); // Keep top 3
         this.saveLeaderboard();
     }
 
     isHighScore(score) {
-        if (this.leaderboard.length < 5) return true;
+        if (this.leaderboard.length < 3) return true;
         return score > this.leaderboard[this.leaderboard.length - 1].score;
     }
 
