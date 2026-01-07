@@ -294,7 +294,7 @@ const LEVELS = [
         ],
         // Boss fight at the end!
         boss: {
-            name: 'Shadow King',
+            name: 'Emil',
             health: 5,
             xMult: 4.2 // Position before finish line
         }
@@ -2903,7 +2903,7 @@ class GameScene extends Phaser.Scene {
             .setScrollFactor(0).setDepth(999);
 
         // "BOSS APPROACHING" warning text
-        const warningText = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, '⚠ WARNING ⚠', {
+        const warningText = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, '⚠ EMIL ARRIVED ⚠', {
             fontFamily: 'Outfit, sans-serif',
             fontSize: '48px',
             fill: '#ff0000',
@@ -2926,7 +2926,7 @@ class GameScene extends Phaser.Scene {
         // After warning, reveal the boss name
         this.time.delayedCall(1200, () => {
             const bossIntroText = this.add.text(this.scale.width / 2, this.scale.height / 2,
-                '「 SHADOW KING 」', {
+                '「 EMIL 」', {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '64px',
                 fill: '#8800ff',
@@ -3116,7 +3116,7 @@ class GameScene extends Phaser.Scene {
         const subText = this.add.text(
             this.cameras.main.scrollX + width / 2,
             this.cameras.main.scrollY + height / 2,
-            'The Shadow King has been defeated!\nYou escaped The Abyss!',
+            'Emil has been defeated!\nYou escaped The Abyss!',
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '24px',
