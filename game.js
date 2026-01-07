@@ -2440,6 +2440,9 @@ class GameScene extends Phaser.Scene {
 
         // Flying Enemy Logic
         this.updateFlyingEnemies(this.time.now);
+
+        // Boss AI Logic
+        this.updateBoss();
     }
 
     shutdown() {
