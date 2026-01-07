@@ -2028,8 +2028,8 @@ class GameScene extends Phaser.Scene {
         // Don't process game logic while paused
         if (this.isPaused) return;
 
-        // Timer countdown
-        if (!this.levelComplete) {
+        // Timer countdown - STOPS during boss fight!
+        if (!this.levelComplete && !this.bossActive) {
             this.levelTime -= this.game.loop.delta / 1000;
 
             if (this.levelTime <= 0) {
@@ -3185,29 +3185,91 @@ class GameScene extends Phaser.Scene {
     updateBoss() {
         if (!this.boss || this.bossDefeated || !this.bossActive) return;
 
-        // Simple AI: move back and forth and occasionally charge at player
+        // Initialize boss state if needed
+        if (this.bossState === undefined) {
+            this.bossState = 'patrol';
+            this.bossStateTimer = 0;
+            this.bossJumpCooldown = 0;
+        }
+
         this.bossAttackTimer += this.game.loop.delta;
+        this.bossStateTimer += this.game.loop.delta;
+        this.bossJumpCooldown = Math.max(0, this.bossJumpCooldown - this.game.loop.delta);
 
-        // Patrol movement - slower for the massive boss
-        if (this.bossAttackTimer < 2500) {
-            this.boss.setVelocityX(this.bossDirection * 80);
+        const isOnGround = this.boss.body.touching.down || this.boss.body.blocked.down;
 
-            // Change direction at edges of patrol area
-            if (this.boss.x < this.scale.width * 3.6) {
-                this.bossDirection = 1;
-            } else if (this.boss.x > this.scale.width * 4.6) {
-                this.bossDirection = -1;
-            }
-        } else if (this.bossAttackTimer < 4000) {
-            // Charge at player! Terrifying when boss is huge
-            const dirToPlayer = this.player.x < this.boss.x ? -1 : 1;
-            this.boss.setVelocityX(dirToPlayer * 200);
-            // Ground shake while charging
-            if (Math.random() < 0.1) {
-                this.cameras.main.shake(100, 0.005);
-            }
-        } else {
-            this.bossAttackTimer = 0;
+        // State machine for varied boss behavior
+        switch (this.bossState) {
+            case 'patrol':
+                // Slow patrol back and forth
+                this.boss.setVelocityX(this.bossDirection * 60);
+
+                // Change direction at edges
+                if (this.boss.x < this.scale.width * 3.4) {
+                    this.bossDirection = 1;
+                } else if (this.boss.x > this.scale.width * 4.8) {
+                    this.bossDirection = -1;
+                }
+
+                // Random jump while patrolling
+                if (isOnGround && this.bossJumpCooldown <= 0 && Math.random() < 0.01) {
+                    this.boss.setVelocityY(-400);
+                    this.bossJumpCooldown = 2000;
+                    this.cameras.main.shake(150, 0.01);
+                }
+
+                // Switch to charge after patrol time
+                if (this.bossStateTimer > 3000) {
+                    this.bossState = 'charge';
+                    this.bossStateTimer = 0;
+                }
+                break;
+
+            case 'charge':
+                // Aggressive charge towards player!
+                const dirToPlayer = this.player.x < this.boss.x ? -1 : 1;
+                this.boss.setVelocityX(dirToPlayer * 180);
+
+                // Ground shake while charging
+                if (Math.random() < 0.15) {
+                    this.cameras.main.shake(80, 0.008);
+                }
+
+                // Switch to jump attack after charge
+                if (this.bossStateTimer > 2000) {
+                    this.bossState = 'jump_attack';
+                    this.bossStateTimer = 0;
+                }
+                break;
+
+            case 'jump_attack':
+                // BIG jump towards player!
+                if (isOnGround && this.bossJumpCooldown <= 0) {
+                    const jumpDir = this.player.x < this.boss.x ? -1 : 1;
+                    this.boss.setVelocityY(-500); // High jump!
+                    this.boss.setVelocityX(jumpDir * 150);
+                    this.bossJumpCooldown = 1500;
+                    this.playSound('jump');
+                }
+
+                // Landing impact
+                if (isOnGround && Math.abs(this.boss.body.velocity.y) < 10 && this.bossStateTimer > 500) {
+                    this.cameras.main.shake(300, 0.02);
+                    this.bossState = 'stomp';
+                    this.bossStateTimer = 0;
+                }
+                break;
+
+            case 'stomp':
+                // Pause briefly after landing (vulnerable moment)
+                this.boss.setVelocityX(0);
+
+                if (this.bossStateTimer > 1000) {
+                    // Random next state
+                    this.bossState = Math.random() < 0.5 ? 'patrol' : 'charge';
+                    this.bossStateTimer = 0;
+                }
+                break;
         }
 
         // Flip sprite based on direction
