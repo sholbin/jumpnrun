@@ -3051,6 +3051,13 @@ class GameScene extends Phaser.Scene {
                         this.currentLevel = 2;
                         localStorage.setItem('superNoeCurrentLevel', '2');
                     }
+                    // Clean up boss fight state to prevent freeze on restart
+                    this.bossDefeated = true; // Prevent further boss interactions
+                    this.bossActive = false;
+                    this.isPaused = false;
+                    if (this.player && this.player.body) {
+                        this.player.body.enable = true;
+                    }
                     this.score = 0;
                     this.scene.restart();
                 }
