@@ -291,7 +291,13 @@ const LEVELS = [
             { x: 1600, yOffset: 160, contents: 'coins' },
             { x: 2100, yOffset: 130, contents: 'star' },
             { x: 2600, yOffset: 150, contents: 'heart' }
-        ]
+        ],
+        // Boss fight at the end!
+        boss: {
+            name: 'Shadow King',
+            health: 5,
+            xMult: 4.2 // Position before finish line
+        }
     }
 ];
 
@@ -454,6 +460,13 @@ class GameScene extends Phaser.Scene {
         this.totalCoins = 0; // Track total coins for 100 = 1 life
         this.mysteryBlocks = null;
         this.powerups = null;
+        // Boss fight
+        this.boss = null;
+        this.bossHealth = 0;
+        this.bossMaxHealth = 5;
+        this.bossDefeated = false;
+        this.bossHealthBar = null;
+        this.bossNameText = null;
     }
 
     // Get current level data
@@ -511,6 +524,7 @@ class GameScene extends Phaser.Scene {
         // Enemies
         this.enemies = this.physics.add.group();
         this.generateSlimeTexture();
+        this.generateBossTexture();
         this.createEnemies(width, height);
 
         // Player with animations
@@ -541,6 +555,7 @@ class GameScene extends Phaser.Scene {
         this.createMysteryBlocks(width, height);
         this.createPowerupGroup();
         this.createCheckpointAndFinish(width, height);
+        this.createBoss(width, height);
 
         // Physics
         this.physics.add.collider(this.player, this.platforms);
@@ -946,6 +961,11 @@ class GameScene extends Phaser.Scene {
                     });
                     this.updateUI();
                 } else {
+                    // If in secret level (4), reset to level 1
+                    if (this.currentLevel === 3) {
+                        this.currentLevel = 0;
+                        localStorage.setItem('superNoeCurrentLevel', '0');
+                    }
                     // No checkpoint - game over, check for high score before restart
                     if (this.isHighScore(this.score)) {
                         this.promptForName(() => {
@@ -2026,6 +2046,11 @@ class GameScene extends Phaser.Scene {
                         this.player.setVelocity(0, 0);
                         this.updateUI();
                     } else {
+                        // If in secret level (4), reset to level 1
+                        if (this.currentLevel === 3) {
+                            this.currentLevel = 0;
+                            localStorage.setItem('superNoeCurrentLevel', '0');
+                        }
                         // Game over - check for high score before restart
                         if (this.isHighScore(this.score)) {
                             this.promptForName(() => {
@@ -2118,6 +2143,11 @@ class GameScene extends Phaser.Scene {
                         });
                         this.updateUI();
                     } else {
+                        // If in secret level (4), reset to level 1
+                        if (this.currentLevel === 3) {
+                            this.currentLevel = 0;
+                            localStorage.setItem('superNoeCurrentLevel', '0');
+                        }
                         // No checkpoint - game over, check for high score before restart
                         if (this.isHighScore(this.score)) {
                             this.promptForName(() => {
@@ -2476,6 +2506,75 @@ class GameScene extends Phaser.Scene {
         g.destroy();
     }
 
+    generateBossTexture() {
+        const g = this.make.graphics();
+        const w = 80, h = 80;
+
+        // Shadow King - a large dark menacing figure
+        // Body (dark purple/black)
+        g.fillStyle(0x1a0a2e, 1);
+        g.fillEllipse(w / 2, h / 2 + 10, 60, 50);
+
+        // Cloak/cape effect
+        g.fillStyle(0x2d1b4e, 1);
+        g.beginPath();
+        g.moveTo(10, 40);
+        g.lineTo(40, 80);
+        g.lineTo(70, 40);
+        g.closePath();
+        g.fillPath();
+
+        // Crown
+        g.fillStyle(0x4a0080, 1);
+        g.fillRect(25, 5, 30, 15);
+        g.fillTriangle(25, 5, 30, 0, 35, 5);
+        g.fillTriangle(40, 5, 45, 0, 50, 5);
+        g.fillTriangle(55, 5, 50, 0, 45, 5);
+
+        // Glowing eyes
+        g.fillStyle(0xff0000, 1);
+        g.fillCircle(32, 30, 5);
+        g.fillCircle(48, 30, 5);
+        g.fillStyle(0xffff00, 1);
+        g.fillCircle(32, 30, 2);
+        g.fillCircle(48, 30, 2);
+
+        // Menacing mouth
+        g.fillStyle(0x000000, 1);
+        g.beginPath();
+        g.moveTo(30, 45);
+        g.lineTo(40, 55);
+        g.lineTo(50, 45);
+        g.closePath();
+        g.fillPath();
+
+        g.generateTexture('boss', w, h);
+        g.destroy();
+
+        // Hurt texture (red tint effect)
+        const g2 = this.make.graphics();
+        g2.fillStyle(0x4a0a2e, 1);
+        g2.fillEllipse(w / 2, h / 2 + 10, 60, 50);
+        g2.fillStyle(0x5d1b4e, 1);
+        g2.beginPath();
+        g2.moveTo(10, 40);
+        g2.lineTo(40, 80);
+        g2.lineTo(70, 40);
+        g2.closePath();
+        g2.fillPath();
+        g2.fillStyle(0x6a0080, 1);
+        g2.fillRect(25, 5, 30, 15);
+        g2.fillTriangle(25, 5, 30, 0, 35, 5);
+        g2.fillTriangle(40, 5, 45, 0, 50, 5);
+        g2.fillTriangle(55, 5, 50, 0, 45, 5);
+        g2.fillStyle(0xffffff, 1);
+        g2.fillCircle(32, 30, 5);
+        g2.fillCircle(48, 30, 5);
+
+        g2.generateTexture('boss_hurt', w, h);
+        g2.destroy();
+    }
+
     generateCheckpointTexture() {
         const g = this.make.graphics();
         const w = 40, h = 80;
@@ -2721,6 +2820,282 @@ class GameScene extends Phaser.Scene {
         // Collision detection
         this.physics.add.overlap(this.player, this.checkpoint, this.activateCheckpoint, null, this);
         this.physics.add.overlap(this.player, this.finishLine, this.reachFinish, null, this);
+    }
+
+    createBoss(width, height) {
+        const level = this.getLevelData();
+        if (!level.boss) return; // No boss for this level
+
+        const groundY = height - 20;
+
+        // Create the boss
+        this.boss = this.physics.add.sprite(width * level.boss.xMult, groundY - 60, 'boss');
+        this.boss.setScale(1.5);
+        this.boss.setBounce(0);
+        this.boss.setCollideWorldBounds(true);
+        this.boss.body.setSize(60, 70);
+        this.boss.body.setOffset(10, 5);
+
+        this.bossHealth = level.boss.health;
+        this.bossMaxHealth = level.boss.health;
+        this.bossDefeated = false;
+        this.bossDirection = -1;
+        this.bossAttackTimer = 0;
+
+        // Boss collides with platforms
+        this.physics.add.collider(this.boss, this.platforms);
+
+        // Player-boss collision
+        this.physics.add.overlap(this.player, this.boss, this.hitBoss, null, this);
+
+        // Boss health bar UI
+        this.bossNameText = this.add.text(this.scale.width / 2, 100, level.boss.name, {
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '24px',
+            fill: '#ff4444',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+
+        // Health bar background
+        this.bossHealthBarBg = this.add.rectangle(this.scale.width / 2, 130, 204, 24, 0x000000)
+            .setScrollFactor(0).setDepth(1000);
+
+        // Health bar fill
+        this.bossHealthBar = this.add.rectangle(this.scale.width / 2, 130, 200, 20, 0xff0000)
+            .setScrollFactor(0).setDepth(1001);
+
+        // Entrance animation
+        this.boss.setAlpha(0);
+        this.tweens.add({
+            targets: this.boss,
+            alpha: 1,
+            duration: 1000,
+            ease: 'Power2'
+        });
+    }
+
+    hitBoss(player, boss) {
+        if (this.bossDefeated || this.isInvincible) return;
+
+        // Check if player is stomping (falling from above)
+        const isStomping = player.body.velocity.y > 0 && player.y < boss.y - 30;
+
+        if (isStomping) {
+            // Damage the boss!
+            this.bossHealth--;
+            player.setVelocityY(-400); // Bounce off
+            this.playSound('stomp');
+
+            // Update health bar
+            const healthPercent = this.bossHealth / this.bossMaxHealth;
+            this.bossHealthBar.setScale(healthPercent, 1);
+
+            // Boss hurt effect
+            boss.setTexture('boss_hurt');
+            this.shakeCamera(0.02, 200);
+
+            this.time.delayedCall(300, () => {
+                if (this.boss && !this.bossDefeated) {
+                    boss.setTexture('boss');
+                }
+            });
+
+            // Check if boss is defeated
+            if (this.bossHealth <= 0) {
+                this.defeatBoss();
+            }
+        } else {
+            // Player takes damage from boss
+            if (!this.isInvincible) {
+                this.lives--;
+                this.updateUI();
+                this.playSound('hurt');
+                this.shakeCamera(0.01, 150);
+                this.flashScreen();
+
+                // Knockback
+                const bounceDirection = (player.x < boss.x) ? -400 : 400;
+                player.setVelocityX(bounceDirection);
+                player.setVelocityY(-300);
+
+                // Invincibility frames
+                this.isInvincible = true;
+                player.setAlpha(0.5);
+                this.time.delayedCall(1500, () => {
+                    this.isInvincible = false;
+                    player.setAlpha(1);
+                });
+
+                if (this.lives <= 0) {
+                    // Handle death - reset to level 1 from secret level
+                    this.lives = 3;
+                    if (this.currentLevel === 3) {
+                        this.currentLevel = 0;
+                        localStorage.setItem('superNoeCurrentLevel', '0');
+                    }
+                    this.score = 0;
+                    this.scene.restart();
+                }
+            }
+        }
+    }
+
+    defeatBoss() {
+        this.bossDefeated = true;
+        this.boss.body.setVelocity(0, 0);
+        this.boss.body.setAllowGravity(false);
+
+        // Dramatic defeat animation
+        this.tweens.add({
+            targets: this.boss,
+            alpha: 0,
+            scaleX: 2,
+            scaleY: 0.1,
+            rotation: Math.PI * 4,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => {
+                this.boss.destroy();
+                this.boss = null;
+            }
+        });
+
+        // Hide health bar
+        if (this.bossHealthBar) this.bossHealthBar.destroy();
+        if (this.bossHealthBarBg) this.bossHealthBarBg.destroy();
+        if (this.bossNameText) this.bossNameText.destroy();
+
+        // Victory screen!
+        this.showBossVictory();
+    }
+
+    showBossVictory() {
+        this.physics.pause();
+        const { width, height } = this.scale;
+
+        // Dark overlay
+        const overlay = this.add.rectangle(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 2,
+            width * 3, height * 3, 0x000000, 0.8
+        ).setDepth(2000);
+
+        // Victory text
+        const victoryText = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 3,
+            '🎉 YOU WON THE GAME! 🎉',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '42px',
+                fill: '#ffd700',
+                stroke: '#000',
+                strokeThickness: 8
+            }
+        ).setOrigin(0.5).setDepth(2001);
+
+        // Subtitle
+        const subText = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 2,
+            'The Shadow King has been defeated!\nYou escaped The Abyss!',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '24px',
+                fill: '#ffffff',
+                stroke: '#000',
+                strokeThickness: 4,
+                align: 'center'
+            }
+        ).setOrigin(0.5).setDepth(2001);
+
+        // Final score
+        const scoreText = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 1.6,
+            `Final Score: ${this.score}`,
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '28px',
+                fill: '#88ff88',
+                stroke: '#000',
+                strokeThickness: 4
+            }
+        ).setOrigin(0.5).setDepth(2001);
+
+        // Continue prompt
+        const continueText = this.add.text(
+            this.cameras.main.scrollX + width / 2,
+            this.cameras.main.scrollY + height / 1.3,
+            this.isMobile ? 'Tap to play again' : 'Press any key to play again',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '20px',
+                fill: '#aaaaaa',
+                stroke: '#000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5).setDepth(2001);
+
+        // Pulsing animation on continue text
+        this.tweens.add({
+            targets: continueText,
+            alpha: 0.5,
+            duration: 600,
+            yoyo: true,
+            repeat: -1
+        });
+
+        // Handle restart
+        this.time.delayedCall(1500, () => {
+            const restart = () => {
+                // Check for high score
+                if (this.isHighScore(this.score)) {
+                    this.promptForName(() => {
+                        this.currentLevel = 0;
+                        localStorage.setItem('superNoeCurrentLevel', '0');
+                        this.score = 0;
+                        this.scene.restart();
+                    });
+                } else {
+                    this.currentLevel = 0;
+                    localStorage.setItem('superNoeCurrentLevel', '0');
+                    this.score = 0;
+                    this.scene.restart();
+                }
+            };
+            this.input.once('pointerdown', restart);
+            this.input.keyboard.once('keydown', restart);
+        });
+    }
+
+    updateBoss() {
+        if (!this.boss || this.bossDefeated) return;
+
+        // Simple AI: move back and forth and occasionally charge at player
+        this.bossAttackTimer += this.game.loop.delta;
+
+        // Patrol movement
+        if (this.bossAttackTimer < 2000) {
+            this.boss.setVelocityX(this.bossDirection * 100);
+
+            // Change direction at edges of patrol area
+            if (this.boss.x < this.scale.width * 3.8) {
+                this.bossDirection = 1;
+            } else if (this.boss.x > this.scale.width * 4.4) {
+                this.bossDirection = -1;
+            }
+        } else if (this.bossAttackTimer < 3000) {
+            // Charge at player!
+            const dirToPlayer = this.player.x < this.boss.x ? -1 : 1;
+            this.boss.setVelocityX(dirToPlayer * 250);
+        } else {
+            this.bossAttackTimer = 0;
+        }
+
+        // Flip sprite based on direction
+        this.boss.setFlipX(this.boss.body.velocity.x > 0);
     }
 
     createMysteryBlocks(width, height) {
@@ -3038,7 +3413,9 @@ class GameScene extends Phaser.Scene {
         });
 
         const { width, height } = this.scale;
-        const isLastLevel = this.currentLevel >= LEVELS.length - 1;
+        // Level 3 (index 2) is the last normal level, Level 4 (index 3) is the secret level
+        // Both are considered "final" levels - you win after completing them
+        const isLastLevel = this.currentLevel >= 2; // Level 3 or secret Level 4
 
         // Title text
         const titleText = isLastLevel ? 'YOU WIN!' : 'LEVEL COMPLETE!';
@@ -3072,8 +3449,13 @@ class GameScene extends Phaser.Scene {
 
         // Next level or restart prompt
         let promptMessage;
+        const isSecretLevel = this.currentLevel === 3;
         if (isLastLevel) {
-            promptMessage = this.isMobile ? 'Tap to play again' : 'Press any key to play again';
+            if (isSecretLevel) {
+                promptMessage = this.isMobile ? 'You escaped The Abyss! Tap to play again' : 'You escaped The Abyss! Press any key to play again';
+            } else {
+                promptMessage = this.isMobile ? 'Tap to play again' : 'Press any key to play again';
+            }
         } else {
             const nextLevel = LEVELS[this.currentLevel + 1];
             promptMessage = this.isMobile ? `Tap for Level ${this.currentLevel + 2}: ${nextLevel.name}` : `Press any key for Level ${this.currentLevel + 2}`;
