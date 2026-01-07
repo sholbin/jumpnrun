@@ -375,6 +375,7 @@ class GameScene extends Phaser.Scene {
         this.isJumping = false; // Track if we're in a jump (for variable height)
         this.jumpReleased = true; // Track if jump button was released
         this.isGroundPounding = false; // Track ground pound state
+        this.groundPoundTimer = 0; // Timer for ground pound duration
         // Ground stability - prevents physics jitter after landing
         this.groundedFrames = 0; // Frames since last confirmed ground contact
         // Timer system
@@ -2062,26 +2063,44 @@ class GameScene extends Phaser.Scene {
         // Ground pound mechanic - press down while in air to slam down
         if (!isOnGround && this.cursors.down.isDown && !this.isGroundPounding && this.player.body.velocity.y > -100) {
             this.isGroundPounding = true;
-            this.player.setVelocityY(500); // Fast downward slam
-            this.player.setVelocityX(this.player.body.velocity.x * 0.3); // Reduce horizontal momentum
+            this.groundPoundTimer = 0;
+            this.player.setVelocityY(600); // Fast downward slam
+            this.player.setVelocityX(0); // Stop horizontal movement completely for maximum butt bomb
+        }
+
+        // Update ground pound timer and cancel after 1 second
+        if (this.isGroundPounding) {
+            this.groundPoundTimer += this.game.loop.delta;
+            if (this.groundPoundTimer > 1000) {
+                // Cancel ground pound after 1 second
+                this.isGroundPounding = false;
+                this.groundPoundTimer = 0;
+                this.player.setRotation(0);
+                this.resetPlayerScale();
+            }
         }
 
         // Reset ground pound when landing
         if (isOnGround && this.isGroundPounding) {
             this.isGroundPounding = false;
+            this.groundPoundTimer = 0;
             // Reset rotation and scale from ass bomb pose
             this.player.setRotation(0);
             this.resetPlayerScale();
-            // Big landing impact effect
-            this.shakeCamera(0.01, 150);
+            // BIG landing impact effect
+            this.shakeCamera(0.02, 200);
             if (this.dustEmitter) {
-                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 12);
+                // Lots of dust!
+                this.dustEmitter.emitParticleAt(this.player.x - 20, this.player.y + 20, 8);
+                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 10);
+                this.dustEmitter.emitParticleAt(this.player.x + 20, this.player.y + 20, 8);
             }
             // Extra squash on landing for comedic effect
-            this.player.setScale(1.4, 0.6);
-            this.time.delayedCall(100, () => {
+            this.player.setScale(1.6, 0.5);
+            this.time.delayedCall(150, () => {
                 if (!this.isGroundPounding) this.resetPlayerScale();
             });
+            this.playSound('land');
         }
 
         // Mario physics: Faster falling - ONLY when truly in the air
@@ -2104,10 +2123,12 @@ class GameScene extends Phaser.Scene {
 
         // Ground pound "ass bomb" pose - rotate and squash for funny look
         if (this.isGroundPounding) {
-            // Rotate to look like sitting/butt bomb position
-            this.player.setRotation(Math.PI); // Flip upside down (butt first!)
-            // Squash horizontally, stretch vertically for comical effect
-            this.player.setScale(1.3, 0.7);
+            // Wobbling spin while falling butt-first - looks hilarious!
+            const wobble = Math.sin(this.groundPoundTimer * 0.03) * 0.3;
+            this.player.setRotation(Math.PI + wobble); // Upside down with wobble!
+            // Pulsing squash for extra silliness
+            const pulse = 1 + Math.sin(this.groundPoundTimer * 0.02) * 0.15;
+            this.player.setScale(1.4 * pulse, 0.6 / pulse);
         }
         // Sprint leaning
         else if (isMoving && this.isSprinting && this.player.body.touching.down) {
