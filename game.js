@@ -227,6 +227,71 @@ const LEVELS = [
             { x: 3100, yOffset: 130, contents: 'heart' },
             { x: 3700, yOffset: 150, contents: 'mushroom' }
         ]
+    },
+    // Level 4: SECRET DARK LEVEL - Accessed by ground pounding while falling in Level 3
+    {
+        name: "The Abyss",
+        worldLength: 5,
+        theme: 'dark', // Special dark night theme
+        lavaPositions: [1.0, 1.6, 2.2, 2.8, 3.4, 4.0],
+        platforms: [
+            { x: 150, yOffset: 80 },
+            { x: 350, yOffset: 150 },
+            { x: 550, yOffset: 100 },
+            { x: 750, yOffset: 180 },
+            { x: 950, yOffset: 120 },
+            { x: 1150, yOffset: 200 },
+            { x: 1350, yOffset: 140 },
+            { x: 1550, yOffset: 180 },
+            { x: 1750, yOffset: 100 },
+            { x: 1950, yOffset: 160 },
+            { x: 2150, yOffset: 220 },
+            { x: 2350, yOffset: 140 },
+            { x: 2550, yOffset: 180 },
+            { x: 2750, yOffset: 120 }
+        ],
+        enemies: [
+            { x: 400, yOffset: 30, patrol: 90 },
+            { x: 800, yOffset: 30, patrol: 110 },
+            { x: 1200, yOffset: 30, patrol: 85 },
+            { x: 1600, yOffset: 30, patrol: 100 },
+            { x: 2000, yOffset: 30, patrol: 95 },
+            { x: 350, yOffset: 180, patrol: 60 },
+            { x: 1150, yOffset: 230, patrol: 70 },
+            { x: 1950, yOffset: 190, patrol: 65 }
+        ],
+        flyingEnemies: [
+            { xMult: 0.5, yMult: 0.2, range: 180 },
+            { xMult: 1.0, yMult: 0.25, range: 200 },
+            { xMult: 1.5, yMult: 0.2, range: 170 },
+            { xMult: 2.0, yMult: 0.3, range: 190 },
+            { xMult: 2.5, yMult: 0.25, range: 210 }
+        ],
+        coins: [
+            { xMult: 0.3, yMult: 0.5 },
+            { xMult: 0.5, yMult: 0.4 },
+            { xMult: 0.8, yMult: 0.35 },
+            { xMult: 1.1, yMult: 0.45 },
+            { xMult: 1.4, yMult: 0.3 },
+            { xMult: 1.7, yMult: 0.4 },
+            { xMult: 2.0, yMult: 0.35 },
+            { xMult: 2.3, yMult: 0.45 },
+            { xMult: 2.6, yMult: 0.3 },
+            { xMult: 0.6, ground: true },
+            { xMult: 1.3, ground: true },
+            { xMult: 2.1, ground: true }
+        ],
+        spikes: [0.7, 1.1, 1.5, 1.9, 2.4, 2.9, 3.3, 3.8],
+        checkpoint: { xMult: 2.2 },
+        finish: { xMult: 4.5 },
+        mysteryBlocks: [
+            { x: 250, yOffset: 130, contents: 'star' },
+            { x: 700, yOffset: 150, contents: 'heart' },
+            { x: 1100, yOffset: 140, contents: 'mushroom' },
+            { x: 1600, yOffset: 160, contents: 'coins' },
+            { x: 2100, yOffset: 130, contents: 'star' },
+            { x: 2600, yOffset: 150, contents: 'heart' }
+        ]
     }
 ];
 
@@ -424,6 +489,9 @@ class GameScene extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
+
+        // Stop any playing dark ambience from previous level
+        this.stopDarkAmbience();
 
         // Get mobile state from registry
         this.isMobile = this.registry.get('isMobile') || false;
@@ -639,42 +707,77 @@ class GameScene extends Phaser.Scene {
     }
 
     createBackground(width, height) {
-        // Sky gradient
+        const level = this.getLevelData();
+        const isDark = level.theme === 'dark';
+
+        // Sky gradient - dark purple/black for night, blue for day
         const sky = this.add.graphics();
-        sky.fillGradientStyle(0x87ceeb, 0x87ceeb, 0x98d1f0, 0xb8e0f7, 1);
+        if (isDark) {
+            sky.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x1a1a3a, 0x2a1a4a, 1);
+        } else {
+            sky.fillGradientStyle(0x87ceeb, 0x87ceeb, 0x98d1f0, 0xb8e0f7, 1);
+        }
         sky.fillRect(0, 0, width * 4, height);
         sky.setScrollFactor(0);
 
-        // Use forest background if available
+        // Stars for dark theme
+        if (isDark) {
+            const stars = this.add.graphics();
+            stars.fillStyle(0xffffff, 1);
+            for (let i = 0; i < 100; i++) {
+                const starSize = Math.random() * 2 + 0.5;
+                const alpha = Math.random() * 0.5 + 0.3;
+                stars.fillStyle(0xffffff, alpha);
+                stars.fillCircle(Math.random() * width * 4, Math.random() * height * 0.6, starSize);
+            }
+            stars.setScrollFactor(0.02);
+
+            // Eerie moon
+            const moon = this.add.graphics();
+            moon.fillStyle(0xccccaa, 0.8);
+            moon.fillCircle(width * 0.8, 80, 40);
+            moon.fillStyle(0x0a0a1a, 1);
+            moon.fillCircle(width * 0.8 + 15, 75, 35); // Crescent shadow
+            moon.setScrollFactor(0);
+        }
+
+        // Use forest background if available (darker for night)
         if (this.textures.exists('bg_forest')) {
             this.bgImage = this.add.tileSprite(width / 2, height * 0.6, width, height * 0.8, 'bg_forest');
             this.bgImage.setScrollFactor(0);
-            this.bgImage.setAlpha(0.5);
+            this.bgImage.setAlpha(isDark ? 0.2 : 0.5);
+            if (isDark) this.bgImage.setTint(0x3333aa);
         }
 
-        // Clouds
+        // Clouds (dark clouds for night)
         this.cloudsLayer = this.add.graphics();
-        this.cloudsLayer.fillStyle(0xffffff, 1);
+        this.cloudsLayer.fillStyle(isDark ? 0x222244 : 0xffffff, 1);
         for (let i = 0; i < 8; i++) {
             this.drawCloud(this.cloudsLayer, i * 350 + 100, 50 + Math.random() * 60, 0.7 + Math.random() * 0.5);
         }
         this.cloudsLayer.setScrollFactor(0.05);
+        if (isDark) this.cloudsLayer.setAlpha(0.4);
 
-        // Distant hills
+        // Distant hills (dark silhouettes for night)
         const hills = this.add.graphics();
-        hills.fillStyle(0x6b8e6b, 1);
+        hills.fillStyle(isDark ? 0x1a1a2a : 0x6b8e6b, 1);
         for (let i = 0; i < 15; i++) {
             hills.fillCircle(i * 200, height - 50, 100 + Math.random() * 50);
         }
         hills.setScrollFactor(0.2);
 
-        // Trees - Draw from ground level (same scroll rate as platforms so they look grounded)
+        // Trees - Draw from ground level (dark silhouettes for night)
         const groundY = height - 20;
         const trees = this.add.graphics();
         for (let i = 0; i < 20; i++) {
-            this.drawTree(trees, i * 200 + 50, groundY, 80 + Math.random() * 60);
+            this.drawTree(trees, i * 200 + 50, groundY, 80 + Math.random() * 60, isDark);
         }
-        trees.setScrollFactor(1); // Same as platforms so they look grounded
+        trees.setScrollFactor(1);
+
+        // Start dark ambient music if dark theme
+        if (isDark) {
+            this.startDarkAmbience();
+        }
     }
 
     drawCloud(g, x, y, scale) {
@@ -686,20 +789,29 @@ class GameScene extends Phaser.Scene {
         g.fillCircle(x + s * 0.35, y - s * 0.2, s * 0.5);
     }
 
-    drawTree(g, x, baseY, h) {
-        // Trunk
-        g.fillStyle(0x5d4037, 1);
-        g.fillRect(x - 10, baseY - h * 0.4, 20, h * 0.4);
+    drawTree(g, x, baseY, h, isDark = false) {
+        if (isDark) {
+            // Dark silhouette tree
+            g.fillStyle(0x0a0a15, 1);
+            g.fillRect(x - 10, baseY - h * 0.4, 20, h * 0.4);
+            g.fillCircle(x, baseY - h * 0.5, h * 0.35);
+            g.fillCircle(x - h * 0.2, baseY - h * 0.4, h * 0.28);
+            g.fillCircle(x + h * 0.2, baseY - h * 0.4, h * 0.28);
+        } else {
+            // Trunk
+            g.fillStyle(0x5d4037, 1);
+            g.fillRect(x - 10, baseY - h * 0.4, 20, h * 0.4);
 
-        // Foliage
-        g.fillStyle(0x2e7d32, 1);
-        g.fillCircle(x, baseY - h * 0.5, h * 0.35);
-        g.fillCircle(x - h * 0.2, baseY - h * 0.4, h * 0.28);
-        g.fillCircle(x + h * 0.2, baseY - h * 0.4, h * 0.28);
+            // Foliage
+            g.fillStyle(0x2e7d32, 1);
+            g.fillCircle(x, baseY - h * 0.5, h * 0.35);
+            g.fillCircle(x - h * 0.2, baseY - h * 0.4, h * 0.28);
+            g.fillCircle(x + h * 0.2, baseY - h * 0.4, h * 0.28);
 
-        // Highlight
-        g.fillStyle(0x43a047, 1);
-        g.fillCircle(x - 5, baseY - h * 0.55, h * 0.18);
+            // Highlight
+            g.fillStyle(0x43a047, 1);
+            g.fillCircle(x - 5, baseY - h * 0.55, h * 0.18);
+        }
     }
 
     createPlatforms(width, height) {
@@ -1388,6 +1500,78 @@ class GameScene extends Phaser.Scene {
         }
     }
 
+    // Dark ambient music for the secret level
+    startDarkAmbience() {
+        try {
+            if (!this.soundContext) {
+                this.soundContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            if (this.soundContext.state === 'suspended') {
+                this.soundContext.resume();
+            }
+
+            const ctx = this.soundContext;
+
+            // Create a dark, droning ambient sound
+            this.darkAmbienceGain = ctx.createGain();
+            this.darkAmbienceGain.connect(ctx.destination);
+            this.darkAmbienceGain.gain.setValueAtTime(0, ctx.currentTime);
+            this.darkAmbienceGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 2);
+
+            // Deep bass drone
+            this.darkOsc1 = ctx.createOscillator();
+            this.darkOsc1.type = 'sine';
+            this.darkOsc1.frequency.setValueAtTime(40, ctx.currentTime);
+            this.darkOsc1.connect(this.darkAmbienceGain);
+            this.darkOsc1.start();
+
+            // Eerie mid tone with slow wobble
+            this.darkOsc2 = ctx.createOscillator();
+            this.darkOsc2.type = 'triangle';
+            this.darkOsc2.frequency.setValueAtTime(80, ctx.currentTime);
+
+            // LFO for eerie wobble
+            const lfo = ctx.createOscillator();
+            const lfoGain = ctx.createGain();
+            lfo.frequency.setValueAtTime(0.3, ctx.currentTime);
+            lfoGain.gain.setValueAtTime(5, ctx.currentTime);
+            lfo.connect(lfoGain);
+            lfoGain.connect(this.darkOsc2.frequency);
+            lfo.start();
+
+            this.darkOsc2.connect(this.darkAmbienceGain);
+            this.darkOsc2.start();
+
+            // High eerie whisper
+            this.darkOsc3 = ctx.createOscillator();
+            this.darkOsc3.type = 'sine';
+            this.darkOsc3.frequency.setValueAtTime(220, ctx.currentTime);
+            const highGain = ctx.createGain();
+            highGain.gain.setValueAtTime(0.02, ctx.currentTime);
+            this.darkOsc3.connect(highGain);
+            highGain.connect(this.darkAmbienceGain);
+            this.darkOsc3.start();
+
+            // Store LFO for cleanup
+            this.darkLfo = lfo;
+
+        } catch (e) {
+            console.warn("Dark ambience error:", e);
+        }
+    }
+
+    stopDarkAmbience() {
+        try {
+            if (this.darkOsc1) { this.darkOsc1.stop(); this.darkOsc1 = null; }
+            if (this.darkOsc2) { this.darkOsc2.stop(); this.darkOsc2 = null; }
+            if (this.darkOsc3) { this.darkOsc3.stop(); this.darkOsc3 = null; }
+            if (this.darkLfo) { this.darkLfo.stop(); this.darkLfo = null; }
+        } catch (e) {
+            // Ignore cleanup errors
+        }
+    }
+
     createAnimatedPlayer(width, height) {
         // Create player using atlas frame
         const groundY = height - 20;
@@ -1895,6 +2079,25 @@ class GameScene extends Phaser.Scene {
         // Fall death check (2 seconds of free-falling)
         if (!this.player.body.touching.down && this.player.body.velocity.y > 100) {
             this.fallTimer += this.game.loop.delta;
+
+            // SECRET LEVEL TRIGGER: Ground pound while falling in Level 3!
+            if (this.currentLevel === 2 && this.isGroundPounding && this.fallTimer > 500) {
+                // Found the secret! Go to The Abyss (Level 4)
+                this.fallTimer = 0;
+                this.isGroundPounding = false;
+                this.player.setRotation(0);
+                this.player.setAlpha(1);
+
+                // Dramatic transition effect
+                this.cameras.main.fade(1000, 0, 0, 0);
+                this.time.delayedCall(1000, () => {
+                    this.currentLevel = 3; // Secret level index
+                    localStorage.setItem('superNoeCurrentLevel', '3');
+                    this.scene.restart();
+                });
+                return;
+            }
+
             if (this.fallTimer > 2000) { // 2 seconds
                 this.fallTimer = 0;
                 this.lives--;
