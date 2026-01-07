@@ -1660,7 +1660,12 @@ class GameScene extends Phaser.Scene {
         // World bounds based on level length (start at 0 to prevent falling off left side)
         // Bottom extends way below screen so player can fall into pits
         const level = this.getLevelData();
-        this.physics.world.setBounds(0, 0, width * level.worldLength, height + 500);
+        this.physics.world.setBounds(0, 0, width * level.worldLength, height + 2000);
+        // Allow player to fall through bottom boundary (for pit deaths) but not escape left/right
+        this.player.body.setCollideWorldBounds(true);
+        this.player.body.onWorldBounds = true;
+        // Disable bottom collision - player can fall through
+        this.physics.world.bounds.bottom = height + 5000;
     }
 
     // ============================================
