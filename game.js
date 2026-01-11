@@ -295,8 +295,13 @@ const LEVELS = [
         // Boss fight at the end!
         boss: {
             name: 'Emil',
-            health: 5,
-            xMult: 4.2 // Position before finish line
+            health: 8, // Increased to support trap-based combat
+            xMult: 4.2, // Position before finish line
+            traps: [
+                { type: 'spike_pit', xOffset: -250 },  // Left of Emil
+                { type: 'spike_pit', xOffset: 250 },   // Right of Emil
+                { type: 'lava_geyser', xOffset: 0 }    // Center (under Emil)
+            ]
         }
     }
 ];
@@ -420,8 +425,10 @@ class GameScene extends Phaser.Scene {
         // Leaderboard - stores top 10 scores with player names
         this.leaderboard = this.loadLeaderboard();
         this.playerName = localStorage.getItem('superNoePlayerName') || '';
-        // Level tracking
-        this.currentLevel = parseInt(localStorage.getItem('superNoeCurrentLevel') || '0');
+        // Level tracking - always start at level 0 on fresh game load
+        // Level progress is only maintained during active gameplay session
+        this.currentLevel = 0;
+        localStorage.setItem('superNoeCurrentLevel', '0');
         // Checkpoint and finish line
         this.checkpoint = null;
         this.finishLine = null;
@@ -467,6 +474,8 @@ class GameScene extends Phaser.Scene {
         this.bossDefeated = false;
         this.bossHealthBar = null;
         this.bossNameText = null;
+        // Boss arena traps
+        this.arenaTraps = [];
     }
 
     // Get current level data
@@ -549,6 +558,12 @@ class GameScene extends Phaser.Scene {
         this.generateMushroomTexture();
         this.generateStarTexture();
         this.generateHeartTexture();
+        // Boss arena trap textures
+        this.generateSpikePitClosedTexture();
+        this.generateSpikePitOpenTexture();
+        this.generateLavaGeyserDormantTexture();
+        this.generateLavaGeyserActiveTexture();
+        this.generateTrapSwitchTexture();
 
         this.createHazards(width, height);
         this.createFlyingEnemies(width, height);
@@ -556,6 +571,7 @@ class GameScene extends Phaser.Scene {
         this.createPowerupGroup();
         this.createCheckpointAndFinish(width, height);
         this.createBoss(width, height);
+        this.createBossArenaTraps(width, height);
 
         // Physics
         this.physics.add.collider(this.player, this.platforms);
@@ -574,6 +590,7 @@ class GameScene extends Phaser.Scene {
         this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
         this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L);
+        this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E); // Trap activation
 
         // UI
         this.createUI();
@@ -2448,6 +2465,11 @@ class GameScene extends Phaser.Scene {
 
         // Boss AI Logic
         this.updateBoss();
+
+        // Boss Arena Traps Logic
+        this.checkTrapActivation();
+        this.checkTrapDamage();
+        this.updateTraps(this.game.loop.delta);
     }
 
     shutdown() {
@@ -2490,6 +2512,176 @@ class GameScene extends Phaser.Scene {
         }
         g.generateTexture('lava', w, h);
         g.destroy();
+    }
+
+    // ============================================
+    // BOSS ARENA TRAP TEXTURES
+    // ============================================
+
+    generateSpikePitClosedTexture() {
+        const g = this.make.graphics();
+        const w = 100, h = 40;
+
+        // Metal hatch cover
+        g.fillStyle(0x4a4a4a, 1);
+        g.fillRect(0, 0, w, h);
+
+        // Hatch lines (industrial look)
+        g.lineStyle(3, 0x333333, 1);
+        g.lineBetween(0, h / 2, w, h / 2);
+        g.lineBetween(w / 2, 0, w / 2, h);
+
+        // Rivets
+        g.fillStyle(0x666666, 1);
+        g.fillCircle(10, 10, 4);
+        g.fillCircle(90, 10, 4);
+        g.fillCircle(10, 30, 4);
+        g.fillCircle(90, 30, 4);
+
+        // Warning stripes
+        g.fillStyle(0xffcc00, 1);
+        g.fillRect(0, 0, w, 5);
+        g.fillStyle(0x000000, 1);
+        for (let i = 0; i < w; i += 20) {
+            g.fillRect(i, 0, 10, 5);
+        }
+
+        g.generateTexture('spike_pit_closed', w, h);
+        g.destroy();
+    }
+
+    generateSpikePitOpenTexture() {
+        const g = this.make.graphics();
+        const w = 100, h = 60;
+
+        // Dark pit background
+        g.fillStyle(0x1a1a1a, 1);
+        g.fillRect(0, 10, w, h - 10);
+
+        // Spikes inside pit
+        g.fillStyle(0xcccccc, 1);
+        for (let i = 10; i < w - 10; i += 15) {
+            g.fillTriangle(i, h, i + 7, 20, i + 14, h);
+        }
+
+        // Spike tips (sharper)
+        g.fillStyle(0xff3333, 1);
+        for (let i = 10; i < w - 10; i += 15) {
+            g.fillTriangle(i + 3, 30, i + 7, 18, i + 11, 30);
+        }
+
+        // Border/frame
+        g.lineStyle(4, 0x333333, 1);
+        g.strokeRect(0, 10, w, h - 10);
+
+        // Warning stripes on edge
+        g.fillStyle(0xff0000, 1);
+        g.fillRect(0, 0, w, 10);
+        g.fillStyle(0x000000, 1);
+        for (let i = 0; i < w; i += 20) {
+            g.fillRect(i, 0, 10, 10);
+        }
+
+        g.generateTexture('spike_pit_open', w, h);
+        g.destroy();
+    }
+
+    generateLavaGeyserDormantTexture() {
+        const g = this.make.graphics();
+        const w = 80, h = 30;
+
+        // Vent base (dark metal)
+        g.fillStyle(0x3a3a3a, 1);
+        g.fillRect(0, 10, w, 20);
+
+        // Grate pattern
+        g.fillStyle(0x222222, 1);
+        g.fillRect(10, 12, 10, 16);
+        g.fillRect(25, 12, 10, 16);
+        g.fillRect(40, 12, 10, 16);
+        g.fillRect(55, 12, 10, 16);
+
+        // Glowing indicator (dormant - dim orange)
+        g.fillStyle(0x553300, 1);
+        g.fillCircle(w / 2, 5, 6);
+        g.fillStyle(0x884400, 0.5);
+        g.fillCircle(w / 2, 5, 4);
+
+        g.generateTexture('lava_geyser_dormant', w, h);
+        g.destroy();
+    }
+
+    generateLavaGeyserActiveTexture() {
+        const g = this.make.graphics();
+        const w = 80, h = 120;
+
+        // Vent base
+        g.fillStyle(0x3a3a3a, 1);
+        g.fillRect(0, h - 30, w, 30);
+
+        // Erupting lava column
+        g.fillStyle(0xff4500, 1);
+        g.fillRect(15, 20, 50, h - 50);
+
+        // Lava glow edges
+        g.fillStyle(0xff8c00, 0.8);
+        g.fillRect(10, 25, 10, h - 55);
+        g.fillRect(60, 25, 10, h - 55);
+
+        // Lava bubbles
+        g.fillStyle(0xffcc00, 1);
+        for (let i = 0; i < 5; i++) {
+            const bx = 20 + Math.random() * 40;
+            const by = 30 + Math.random() * 60;
+            g.fillCircle(bx, by, 4 + Math.random() * 4);
+        }
+
+        // Top flame/splash
+        g.fillStyle(0xff6600, 1);
+        g.fillTriangle(20, 20, 40, 0, 60, 20);
+        g.fillStyle(0xffaa00, 0.7);
+        g.fillTriangle(30, 15, 40, 5, 50, 15);
+
+        g.generateTexture('lava_geyser_active', w, h);
+        g.destroy();
+    }
+
+    generateTrapSwitchTexture() {
+        const g = this.make.graphics();
+        const w = 50, h = 20;
+
+        // Pressure plate base
+        g.fillStyle(0x555555, 1);
+        g.fillRoundedRect(0, 5, w, 15, 4);
+
+        // Top plate (pressable)
+        g.fillStyle(0x888888, 1);
+        g.fillRoundedRect(5, 0, w - 10, 12, 3);
+
+        // Glowing indicator
+        g.fillStyle(0x00ff00, 1);
+        g.fillCircle(w / 2, 6, 4);
+
+        // Edge highlights
+        g.lineStyle(2, 0xaaaaaa, 1);
+        g.strokeRoundedRect(5, 0, w - 10, 12, 3);
+
+        g.generateTexture('trap_switch', w, h);
+        g.destroy();
+
+        // Pressed state
+        const g2 = this.make.graphics();
+        g2.fillStyle(0x555555, 1);
+        g2.fillRoundedRect(0, 8, w, 12, 4);
+        g2.fillStyle(0x666666, 1);
+        g2.fillRoundedRect(5, 6, w - 10, 8, 3);
+        g2.fillStyle(0xff3300, 1);
+        g2.fillCircle(w / 2, 10, 4);
+        g2.lineStyle(2, 0x888888, 1);
+        g2.strokeRoundedRect(5, 6, w - 10, 8, 3);
+
+        g2.generateTexture('trap_switch_pressed', w, h);
+        g2.destroy();
     }
 
     generateBeeTexture() {
@@ -2885,6 +3077,265 @@ class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.player, this.bossTriggerZone, this.triggerBossIntro, null, this);
     }
 
+    // ============================================
+    // BOSS ARENA TRAPS
+    // ============================================
+
+    createBossArenaTraps(width, height) {
+        const level = this.getLevelData();
+        if (!level.boss || !level.boss.traps) return;
+
+        const groundY = height - 20;
+        const bossX = width * level.boss.xMult;
+
+        // Initialize traps array
+        this.arenaTraps = [];
+
+        level.boss.traps.forEach((trapConfig, index) => {
+            const trapX = bossX + trapConfig.xOffset;
+
+            if (trapConfig.type === 'spike_pit') {
+                // Create spike pit (starts closed)
+                const pit = this.add.sprite(trapX, groundY - 20, 'spike_pit_closed');
+                pit.setDepth(5);
+
+                // Create switch near the pit
+                const switchX = trapX + (trapConfig.xOffset < 0 ? 60 : -60);
+                const trapSwitch = this.physics.add.sprite(switchX, groundY - 10, 'trap_switch');
+                trapSwitch.body.setAllowGravity(false);
+                trapSwitch.body.setImmovable(true);
+                trapSwitch.setDepth(5);
+
+                // Create invisible damage zone (only active when pit is open)
+                const damageZone = this.add.rectangle(trapX, groundY - 20, 90, 50, 0xff0000, 0);
+                this.physics.add.existing(damageZone, true);
+                damageZone.body.enable = false; // Disabled until trap activates
+
+                const trap = {
+                    type: 'spike_pit',
+                    pit: pit,
+                    switch: trapSwitch,
+                    damageZone: damageZone,
+                    isActive: false,
+                    cooldownTimer: 0,
+                    cooldownDuration: 6000, // 6 seconds
+                    activeDuration: 2000,   // 2 seconds open
+                    damage: 1
+                };
+
+                this.arenaTraps.push(trap);
+
+            } else if (trapConfig.type === 'lava_geyser') {
+                // Create lava geyser (starts dormant)
+                const geyser = this.add.sprite(trapX, groundY - 15, 'lava_geyser_dormant');
+                geyser.setDepth(5);
+
+                // Geyser is activated by ground pounding on it
+                const geyserZone = this.physics.add.sprite(trapX, groundY - 15, 'lava_geyser_dormant');
+                geyserZone.setAlpha(0); // Invisible hitbox
+                geyserZone.body.setAllowGravity(false);
+                geyserZone.body.setImmovable(true);
+                geyserZone.body.setSize(80, 40);
+
+                // Damage zone (for active geyser - tall column)
+                const damageZone = this.add.rectangle(trapX, groundY - 70, 60, 100, 0xff0000, 0);
+                this.physics.add.existing(damageZone, true);
+                damageZone.body.enable = false;
+
+                const trap = {
+                    type: 'lava_geyser',
+                    geyser: geyser,
+                    trigger: geyserZone,
+                    damageZone: damageZone,
+                    isActive: false,
+                    cooldownTimer: 0,
+                    cooldownDuration: 8000, // 8 seconds
+                    activeDuration: 1500,   // 1.5 seconds erupting
+                    damage: 1
+                };
+
+                this.arenaTraps.push(trap);
+            }
+        });
+    }
+
+    activateTrap(trap) {
+        if (trap.isActive || trap.cooldownTimer > 0) return;
+
+        trap.isActive = true;
+        this.playSound('powerup'); // Reuse existing sound
+
+        if (trap.type === 'spike_pit') {
+            // Open the pit
+            trap.pit.setTexture('spike_pit_open');
+            trap.switch.setTexture('trap_switch_pressed');
+            trap.damageZone.body.enable = true;
+
+            // Camera shake for drama
+            this.shakeCamera(0.01, 150);
+
+            // Close after duration
+            this.time.delayedCall(trap.activeDuration, () => {
+                trap.pit.setTexture('spike_pit_closed');
+                trap.switch.setTexture('trap_switch');
+                trap.damageZone.body.enable = false;
+                trap.isActive = false;
+                trap.cooldownTimer = trap.cooldownDuration;
+            });
+
+        } else if (trap.type === 'lava_geyser') {
+            // Eruption!
+            trap.geyser.setTexture('lava_geyser_active');
+            trap.geyser.y -= 45; // Raise for eruption visual
+            trap.damageZone.body.enable = true;
+
+            // Big shake
+            this.shakeCamera(0.02, 200);
+
+            // End eruption after duration
+            this.time.delayedCall(trap.activeDuration, () => {
+                trap.geyser.setTexture('lava_geyser_dormant');
+                trap.geyser.y += 45; // Lower back
+                trap.damageZone.body.enable = false;
+                trap.isActive = false;
+                trap.cooldownTimer = trap.cooldownDuration;
+            });
+        }
+    }
+
+    checkTrapActivation() {
+        if (!this.arenaTraps || !this.bossActive) return;
+
+        const playerBounds = this.player.getBounds();
+
+        this.arenaTraps.forEach(trap => {
+            if (trap.isActive || trap.cooldownTimer > 0) return;
+
+            if (trap.type === 'spike_pit') {
+                // Check if player is near the switch and pressing E or down
+                const switchBounds = trap.switch.getBounds();
+                const nearSwitch = Phaser.Geom.Rectangle.Overlaps(playerBounds, switchBounds) ||
+                    Math.abs(this.player.x - trap.switch.x) < 40 && Math.abs(this.player.y - trap.switch.y) < 40;
+
+                if (nearSwitch && (Phaser.Input.Keyboard.JustDown(this.eKey) ||
+                    (this.player.body.onFloor() && Phaser.Input.Keyboard.JustDown(this.cursors.down)))) {
+                    this.activateTrap(trap);
+                }
+
+            } else if (trap.type === 'lava_geyser') {
+                // Geyser activated by ground pound landing on it
+                const geyserBounds = trap.trigger.getBounds();
+                const onGeyser = Phaser.Geom.Rectangle.Overlaps(playerBounds, geyserBounds);
+
+                if (onGeyser && this.isGroundPounding && this.player.body.onFloor()) {
+                    this.activateTrap(trap);
+                }
+            }
+        });
+    }
+
+    checkTrapDamage() {
+        if (!this.arenaTraps) return;
+
+        this.arenaTraps.forEach(trap => {
+            if (!trap.isActive || !trap.damageZone.body.enable) return;
+
+            const damageRect = trap.damageZone.getBounds();
+
+            // Check if boss is hit
+            if (this.boss && !this.bossDefeated) {
+                const bossBounds = this.boss.getBounds();
+                if (Phaser.Geom.Rectangle.Overlaps(damageRect, bossBounds)) {
+                    this.damageBossWithTrap(trap);
+                }
+            }
+
+            // Check if player is hit (self-damage!)
+            if (!this.isInvincible) {
+                const playerBounds = this.player.getBounds();
+                if (Phaser.Geom.Rectangle.Overlaps(damageRect, playerBounds)) {
+                    this.damagePlayerWithTrap(trap);
+                }
+            }
+        });
+    }
+
+    damageBossWithTrap(trap) {
+        // Prevent multiple hits from same trap activation
+        if (trap.hitBossThisActivation) return;
+        trap.hitBossThisActivation = true;
+
+        this.bossHealth -= trap.damage;
+        this.playSound('stomp');
+
+        // Update health bar
+        const healthPercent = this.bossHealth / this.bossMaxHealth;
+        this.bossHealthBar.setScale(healthPercent, 1);
+
+        // Boss hurt effect
+        this.boss.setTexture('boss_hurt');
+        this.shakeCamera(0.02, 200);
+
+        this.time.delayedCall(300, () => {
+            if (this.boss && !this.bossDefeated) {
+                this.boss.setTexture('boss');
+            }
+            trap.hitBossThisActivation = false;
+        });
+
+        // Check if boss is defeated
+        if (this.bossHealth <= 0) {
+            this.defeatBoss();
+        }
+    }
+
+    damagePlayerWithTrap(trap) {
+        this.lives--;
+        this.updateUI();
+        this.playSound('hurt');
+        this.shakeCamera(0.01, 150);
+        this.flashScreen();
+
+        // Knockback
+        this.player.setVelocityY(-350);
+
+        // Invincibility frames
+        this.isInvincible = true;
+        this.player.setAlpha(0.5);
+        this.time.delayedCall(CONFIG.player.invincibilityDuration, () => {
+            this.isInvincible = false;
+            this.player.setAlpha(1);
+        });
+
+        if (this.lives <= 0) {
+            this.lives = 3;
+            if (this.currentLevel === 3) {
+                this.currentLevel = 2;
+                localStorage.setItem('superNoeCurrentLevel', '2');
+            }
+            this.bossDefeated = true;
+            this.bossActive = false;
+            this.isPaused = false;
+            if (this.player && this.player.body) {
+                this.player.body.enable = true;
+            }
+            this.score = 0;
+            this.scene.restart();
+        }
+    }
+
+    updateTraps(delta) {
+        if (!this.arenaTraps) return;
+
+        this.arenaTraps.forEach(trap => {
+            // Decrease cooldown timers
+            if (trap.cooldownTimer > 0) {
+                trap.cooldownTimer -= delta;
+                if (trap.cooldownTimer < 0) trap.cooldownTimer = 0;
+            }
+        });
+    }
+
     triggerBossIntro() {
         if (this.bossIntroPlayed || this.bossDefeated) return;
         this.bossIntroPlayed = true;
@@ -3095,21 +3546,25 @@ class GameScene extends Phaser.Scene {
     }
 
     showBossVictory() {
+        // Prevent any other level complete logic from running
+        this.levelComplete = true;
         this.physics.pause();
         const { width, height } = this.scale;
+        const scrollX = this.cameras.main.scrollX;
+        const scrollY = this.cameras.main.scrollY;
 
         // Dark overlay
         const overlay = this.add.rectangle(
-            this.cameras.main.scrollX + width / 2,
-            this.cameras.main.scrollY + height / 2,
-            width * 3, height * 3, 0x000000, 0.8
+            scrollX + width / 2,
+            scrollY + height / 2,
+            width * 3, height * 3, 0x000000, 0.9
         ).setDepth(2000);
 
         // Victory text
         const victoryText = this.add.text(
-            this.cameras.main.scrollX + width / 2,
-            this.cameras.main.scrollY + height / 3,
-            '🎉 YOU WON THE GAME! 🎉',
+            scrollX + width / 2,
+            scrollY + height / 3,
+            'YOU WON THE GAME!',
             {
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '42px',
@@ -3121,8 +3576,8 @@ class GameScene extends Phaser.Scene {
 
         // Subtitle
         const subText = this.add.text(
-            this.cameras.main.scrollX + width / 2,
-            this.cameras.main.scrollY + height / 2,
+            scrollX + width / 2,
+            scrollY + height / 2,
             'Emil has been defeated!\nYou escaped The Abyss!',
             {
                 fontFamily: 'Outfit, sans-serif',
@@ -3136,8 +3591,8 @@ class GameScene extends Phaser.Scene {
 
         // Final score
         const scoreText = this.add.text(
-            this.cameras.main.scrollX + width / 2,
-            this.cameras.main.scrollY + height / 1.6,
+            scrollX + width / 2,
+            scrollY + height / 1.6,
             `Final Score: ${this.score}`,
             {
                 fontFamily: 'Outfit, sans-serif',
@@ -3148,34 +3603,184 @@ class GameScene extends Phaser.Scene {
             }
         ).setOrigin(0.5).setDepth(2001);
 
-        // Continue prompt
-        const continueText = this.add.text(
-            this.cameras.main.scrollX + width / 2,
-            this.cameras.main.scrollY + height / 1.3,
-            this.isMobile ? 'Tap to play again' : 'Press any key to play again',
-            {
-                fontFamily: 'Outfit, sans-serif',
-                fontSize: '20px',
-                fill: '#aaaaaa',
-                stroke: '#000',
-                strokeThickness: 3
-            }
-        ).setOrigin(0.5).setDepth(2001);
+        // Store score for credits scene
+        const finalScore = this.score;
+        const isHighScore = this.isHighScore(this.score);
 
-        // Pulsing animation on continue text
-        this.tweens.add({
-            targets: continueText,
-            alpha: 0.5,
-            duration: 600,
-            yoyo: true,
-            repeat: -1
+        // After 3 seconds, transition to credits
+        this.time.delayedCall(3000, () => {
+            // Fade out victory screen
+            this.tweens.add({
+                targets: [victoryText, subText, scoreText],
+                alpha: 0,
+                duration: 500,
+                onComplete: () => {
+                    victoryText.destroy();
+                    subText.destroy();
+                    scoreText.destroy();
+                    this.showCreditsScene(overlay, finalScore, isHighScore);
+                }
+            });
+        });
+    }
+
+    showCreditsScene(overlay, finalScore, isHighScore) {
+        const { width, height } = this.scale;
+        const scrollX = this.cameras.main.scrollX;
+        const scrollY = this.cameras.main.scrollY;
+
+        // Credits content
+        const creditsContent = [
+            { text: 'SUPER NOE WORLD', style: 'title' },
+            { text: '', style: 'spacer' },
+            { text: 'CREDITS', style: 'header' },
+            { text: '', style: 'spacer' },
+            { text: 'Game Design', style: 'category' },
+            { text: 'Noe', style: 'name' },
+            { text: '', style: 'spacer' },
+            { text: 'Programming', style: 'category' },
+            { text: 'Noe', style: 'name' },
+            { text: '', style: 'spacer' },
+            { text: 'Art & Graphics', style: 'category' },
+            { text: 'Noe', style: 'name' },
+            { text: '', style: 'spacer' },
+            { text: 'Level Design', style: 'category' },
+            { text: 'Noe', style: 'name' },
+            { text: '', style: 'spacer' },
+            { text: 'Boss: Emil', style: 'category' },
+            { text: 'The Ultimate Challenge', style: 'name' },
+            { text: '', style: 'spacer' },
+            { text: '', style: 'spacer' },
+            { text: 'THANK YOU FOR PLAYING!', style: 'header' },
+            { text: '', style: 'spacer' },
+            { text: `Final Score: ${finalScore}`, style: 'score' }
+        ];
+
+        const styles = {
+            title: { fontSize: '48px', fill: '#ffd700', stroke: '#000', strokeThickness: 8 },
+            header: { fontSize: '32px', fill: '#ffd700', stroke: '#000', strokeThickness: 6 },
+            category: { fontSize: '20px', fill: '#aaaaaa', stroke: '#000', strokeThickness: 3 },
+            name: { fontSize: '26px', fill: '#ffffff', stroke: '#000', strokeThickness: 4 },
+            score: { fontSize: '28px', fill: '#88ff88', stroke: '#000', strokeThickness: 4 },
+            spacer: { fontSize: '20px', fill: '#ffffff' }
+        };
+
+        // Create credits container starting below screen
+        let yPos = scrollY + height + 50;
+        const creditsElements = [];
+
+        creditsContent.forEach(item => {
+            const style = { fontFamily: 'Outfit, sans-serif', ...styles[item.style] };
+            const text = this.add.text(scrollX + width / 2, yPos, item.text, style)
+                .setOrigin(0.5)
+                .setDepth(2002);
+            creditsElements.push(text);
+            yPos += item.style === 'spacer' ? 30 : (item.style === 'title' ? 70 : 45);
         });
 
-        // Handle restart
-        this.time.delayedCall(1500, () => {
+        // Calculate scroll distance
+        const totalCreditsHeight = yPos - (scrollY + height + 50);
+        const scrollDistance = totalCreditsHeight + height;
+
+        // Scroll credits upward
+        this.tweens.add({
+            targets: creditsElements,
+            y: `-=${scrollDistance}`,
+            duration: 8000,
+            ease: 'Linear',
+            onComplete: () => {
+                // Show "Press any key" after credits
+                const continueText = this.add.text(
+                    scrollX + width / 2,
+                    scrollY + height / 2,
+                    this.isMobile ? 'Tap to play again' : 'Press any key to play again',
+                    {
+                        fontFamily: 'Outfit, sans-serif',
+                        fontSize: '24px',
+                        fill: '#ffffff',
+                        stroke: '#000',
+                        strokeThickness: 4
+                    }
+                ).setOrigin(0.5).setDepth(2003);
+
+                this.tweens.add({
+                    targets: continueText,
+                    alpha: 0.5,
+                    duration: 600,
+                    yoyo: true,
+                    repeat: -1
+                });
+
+                // Handle restart
+                const restart = () => {
+                    if (isHighScore) {
+                        this.promptForName(() => {
+                            this.currentLevel = 0;
+                            localStorage.setItem('superNoeCurrentLevel', '0');
+                            this.score = 0;
+                            this.scene.restart();
+                        });
+                    } else {
+                        this.currentLevel = 0;
+                        localStorage.setItem('superNoeCurrentLevel', '0');
+                        this.score = 0;
+                        this.scene.restart();
+                    }
+                };
+
+                this.input.once('pointerdown', restart);
+                this.input.keyboard.once('keydown', restart);
+            }
+        });
+
+        // Allow skipping credits
+        const skipText = this.add.text(
+            scrollX + width - 20,
+            scrollY + height - 30,
+            this.isMobile ? 'Tap to skip' : 'Press any key to skip',
+            {
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '16px',
+                fill: '#666666',
+                stroke: '#000',
+                strokeThickness: 2
+            }
+        ).setOrigin(1, 1).setDepth(2003);
+
+        // Skip handler
+        const skipCredits = () => {
+            // Remove skip listeners
+            this.input.off('pointerdown', skipCredits);
+            this.input.keyboard.off('keydown', skipCredits);
+            skipText.destroy();
+
+            // Stop scrolling and show restart prompt immediately
+            this.tweens.killTweensOf(creditsElements);
+            creditsElements.forEach(el => el.destroy());
+
+            const continueText = this.add.text(
+                scrollX + width / 2,
+                scrollY + height / 2,
+                this.isMobile ? 'Tap to play again' : 'Press any key to play again',
+                {
+                    fontFamily: 'Outfit, sans-serif',
+                    fontSize: '24px',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 4
+                }
+            ).setOrigin(0.5).setDepth(2003);
+
+            this.tweens.add({
+                targets: continueText,
+                alpha: 0.5,
+                duration: 600,
+                yoyo: true,
+                repeat: -1
+            });
+
             const restart = () => {
-                // Check for high score
-                if (this.isHighScore(this.score)) {
+                if (isHighScore) {
                     this.promptForName(() => {
                         this.currentLevel = 0;
                         localStorage.setItem('superNoeCurrentLevel', '0');
@@ -3189,9 +3794,13 @@ class GameScene extends Phaser.Scene {
                     this.scene.restart();
                 }
             };
+
             this.input.once('pointerdown', restart);
             this.input.keyboard.once('keydown', restart);
-        });
+        };
+
+        this.input.on('pointerdown', skipCredits);
+        this.input.keyboard.on('keydown', skipCredits);
     }
 
     updateBoss() {
