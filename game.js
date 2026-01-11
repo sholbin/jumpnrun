@@ -1748,6 +1748,39 @@ class GameScene extends Phaser.Scene {
             rotate: { min: 0, max: 360 },
             emitting: false
         });
+
+        // Ember emitter for lava geyser
+        this.emberEmitter = this.add.particles(0, 0, 'ember_particle', {
+            speed: { min: 100, max: 250 },
+            angle: { min: 250, max: 290 },
+            scale: { start: 1, end: 0 },
+            lifespan: 1000,
+            gravityY: 0,
+            alpha: { start: 1, end: 0 },
+            emitting: false
+        });
+
+        // Smoke emitter
+        this.smokeEmitter = this.add.particles(0, 0, 'smoke_particle', {
+            speed: { min: 20, max: 50 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.5, end: 1.5 },
+            lifespan: 1500,
+            gravityY: -20,
+            alpha: { start: 0.5, end: 0 },
+            emitting: false
+        });
+
+        // Metal spark emitter
+        this.sparkEmitter = this.add.particles(0, 0, 'spark_particle', {
+            speed: { min: 100, max: 300 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 1, end: 0 },
+            lifespan: 300,
+            gravityY: 200,
+            alpha: { start: 1, end: 0 },
+            emitting: false
+        });
     }
 
     createParticleTextures() {
@@ -1791,6 +1824,31 @@ class GameScene extends Phaser.Scene {
         confetti.fillRect(20, 0, 8, 12);
         confetti.generateTexture('confetti_particle', 8, 12);
         confetti.destroy();
+
+        // Ember particle (glowing orange/yellow)
+        const ember = this.make.graphics();
+        ember.fillStyle(0xffaa00, 1);
+        ember.fillCircle(4, 4, 4);
+        ember.fillStyle(0xffff00, 1);
+        ember.fillCircle(4, 4, 2);
+        ember.generateTexture('ember_particle', 8, 8);
+        ember.destroy();
+
+        // Smoke particle (grey transparent)
+        const smoke = this.make.graphics();
+        smoke.fillStyle(0x888888, 1);
+        smoke.fillCircle(8, 8, 8);
+        smoke.generateTexture('smoke_particle', 16, 16);
+        smoke.destroy();
+
+        // Metal spark particle (white/blue)
+        const spark = this.make.graphics();
+        spark.fillStyle(0xffffff, 1);
+        spark.fillCircle(3, 3, 3);
+        spark.fillStyle(0xaaccff, 1);
+        spark.fillCircle(3, 3, 2);
+        spark.generateTexture('spark_particle', 6, 6);
+        spark.destroy();
     }
 
     // Score popup floating text
@@ -3360,10 +3418,15 @@ class GameScene extends Phaser.Scene {
             this.flashScreen(0xff3300, 0.2);
             this.playSound('hurt'); // More dramatic sound
 
-            // Dust/debris effect
-            if (this.dustEmitter) {
-                this.dustEmitter.emitParticleAt(trap.pit.x - 30, trap.pit.y, 5);
-                this.dustEmitter.emitParticleAt(trap.pit.x + 30, trap.pit.y, 5);
+            // Mechanical Sparks
+            if (this.sparkEmitter) {
+                this.sparkEmitter.emitParticleAt(trap.pit.x - 40, trap.pit.y, 8);
+                this.sparkEmitter.emitParticleAt(trap.pit.x + 40, trap.pit.y, 8);
+            }
+
+            // Smoke from motors
+            if (this.smokeEmitter) {
+                this.smokeEmitter.emitParticleAt(trap.pit.x, trap.pit.y, 10);
             }
 
             // Close after duration
@@ -3386,15 +3449,14 @@ class GameScene extends Phaser.Scene {
             this.flashScreen(0xff4400, 0.4);
             this.playSound('hurt');
 
-            // Fire particles burst
-            if (this.dustEmitter) {
-                for (let i = 0; i < 10; i++) {
-                    this.dustEmitter.emitParticleAt(
-                        trap.geyser.x + (Math.random() - 0.5) * 60,
-                        trap.geyser.y - 20 - Math.random() * 40,
-                        3
-                    );
-                }
+            // Magma Embers (shoot up)
+            if (this.emberEmitter) {
+                this.emberEmitter.emitParticleAt(trap.geyser.x, trap.geyser.y, 30);
+            }
+
+            // Smoke cloud
+            if (this.smokeEmitter) {
+                this.smokeEmitter.emitParticleAt(trap.geyser.x, trap.geyser.y, 20);
             }
 
             // Pulsing glow effect on geyser
