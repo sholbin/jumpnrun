@@ -454,6 +454,9 @@ class GameScene extends Phaser.Scene {
         this.jumpReleased = true; // Track if jump button was released
         this.isGroundPounding = false; // Track ground pound state
         this.groundPoundTimer = 0; // Timer for ground pound duration
+        this.isSliding = false; // Track slide state for dodging under boss
+        this.slideTimer = 0; // Timer for slide duration
+        this.slideCooldown = 0; // Cooldown between slides
         // Ground stability - prevents physics jitter after landing
         this.groundedFrames = 0; // Frames since last confirmed ground contact
         // Timer system
@@ -1846,14 +1849,24 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.shake(duration, intensity);
     }
 
-    // White flash effect
-    flashScreen() {
+    // Screen flash effect - supports custom color and intensity
+    flashScreen(color = 0xffffff, intensity = 0.6) {
         if (this.damageFlash) {
+            // Update color if specified
+            if (color !== 0xffffff) {
+                this.damageFlash.setFillStyle(color);
+            }
             this.tweens.add({
                 targets: this.damageFlash,
-                alpha: { from: 0.6, to: 0 },
+                alpha: { from: intensity, to: 0 },
                 duration: 150,
-                ease: 'Power2'
+                ease: 'Power2',
+                onComplete: () => {
+                    // Reset to white for normal damage flashes
+                    if (color !== 0xffffff) {
+                        this.damageFlash.setFillStyle(0xffffff);
+                    }
+                }
             });
         }
     }
@@ -2389,6 +2402,51 @@ class GameScene extends Phaser.Scene {
             // Flashing alpha for extra effect instead of scaling
             this.player.setAlpha(0.8 + Math.sin(this.groundPoundTimer * 0.05) * 0.2);
         }
+
+        // Update slide cooldown
+        if (this.slideCooldown > 0) {
+            this.slideCooldown -= this.game.loop.delta;
+        }
+
+        // SLIDE MECHANIC - Press down while moving on ground to slide under Emil!
+        // Only available in boss fight (level 4)
+        if (this.currentLevel === 3 && isOnGround && !this.isSliding && !this.isGroundPounding &&
+            this.slideCooldown <= 0 && isMoving && this.cursors.down.isDown) {
+            this.isSliding = true;
+            this.slideTimer = 0;
+            // Slide in current direction with boost
+            const slideDirection = this.lastDirection === 'left' ? -1 : 1;
+            this.player.setVelocityX(slideDirection * 450); // Fast slide!
+            // Shrink hitbox to slide under boss
+            this.player.body.setSize(this.player.width, this.player.height * 0.5);
+            this.player.body.setOffset(0, this.player.height * 0.5);
+            // Visual: flatten player
+            this.player.setScale(1, 0.5);
+            this.playSound('jump'); // Reuse sound
+            // Dust trail
+            if (this.dustEmitter) {
+                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 20, 5);
+            }
+        }
+
+        // Update slide
+        if (this.isSliding) {
+            this.slideTimer += this.game.loop.delta;
+            // Emit dust while sliding
+            if (this.dustEmitter && Math.random() < 0.3) {
+                this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 15, 2);
+            }
+            // End slide after 400ms or if stopped
+            if (this.slideTimer > 400 || Math.abs(this.player.body.velocity.x) < 100) {
+                this.isSliding = false;
+                this.slideTimer = 0;
+                this.slideCooldown = 600; // 600ms cooldown before next slide
+                // Restore hitbox
+                this.player.body.setSize(this.player.width, this.player.height);
+                this.player.body.setOffset(0, 0);
+                this.player.setScale(1, 1);
+            }
+        }
         // Sprint leaning
         else if (isMoving && this.isSprinting && this.player.body.touching.down) {
             this.player.setRotation(this.lastDirection === 'left' ? -0.2 : 0.2);
@@ -2522,28 +2580,48 @@ class GameScene extends Phaser.Scene {
         const g = this.make.graphics();
         const w = 100, h = 40;
 
-        // Metal hatch cover
-        g.fillStyle(0x4a4a4a, 1);
+        // Base metal plate with gradient
+        g.fillGradientStyle(0x555555, 0x555555, 0x333333, 0x333333, 1);
         g.fillRect(0, 0, w, h);
 
-        // Hatch lines (industrial look)
-        g.lineStyle(3, 0x333333, 1);
+        // Heavy industrial border
+        g.lineStyle(4, 0x222222, 1);
+        g.strokeRect(0, 0, w, h);
+
+        // Center hatch split line
+        g.lineStyle(2, 0x111111, 0.8);
         g.lineBetween(0, h / 2, w, h / 2);
-        g.lineBetween(w / 2, 0, w / 2, h);
 
-        // Rivets
-        g.fillStyle(0x666666, 1);
-        g.fillCircle(10, 10, 4);
-        g.fillCircle(90, 10, 4);
-        g.fillCircle(10, 30, 4);
-        g.fillCircle(90, 30, 4);
+        // Cross-hatch non-slip pattern
+        g.lineStyle(1, 0x000000, 0.2);
+        for (let i = 0; i < w; i += 10) {
+            g.lineBetween(i, 0, i + 10, h);
+            g.lineBetween(i + 10, 0, i, h);
+        }
 
-        // Warning stripes
-        g.fillStyle(0xffcc00, 1);
-        g.fillRect(0, 0, w, 5);
+        // Heavy Rivets in corners
+        g.fillStyle(0x777777, 1);
+        g.fillCircle(8, 8, 3);
+        g.fillCircle(w - 8, 8, 3);
+        g.fillCircle(8, h - 8, 3);
+        g.fillCircle(w - 8, h - 8, 3);
+
+        // Rivet shadows
+        g.fillStyle(0x000000, 0.5);
+        g.fillCircle(9, 9, 3);
+        g.fillCircle(w - 7, 9, 3);
+        g.fillCircle(9, h - 7, 3);
+        g.fillCircle(w - 7, h - 7, 3);
+
+        // Warning stripes at top/bottom edges
+        g.fillStyle(0xffaa00, 1);
+        g.fillRect(20, 0, w - 40, 4);
+        g.fillRect(20, h - 4, w - 40, 4);
+
         g.fillStyle(0x000000, 1);
-        for (let i = 0; i < w; i += 20) {
-            g.fillRect(i, 0, 10, 5);
+        for (let i = 20; i < w - 20; i += 10) {
+            g.fillRect(i, 0, 5, 4);
+            g.fillRect(i, h - 4, 5, 4);
         }
 
         g.generateTexture('spike_pit_closed', w, h);
@@ -2552,34 +2630,88 @@ class GameScene extends Phaser.Scene {
 
     generateSpikePitOpenTexture() {
         const g = this.make.graphics();
-        const w = 100, h = 60;
+        const w = 100, h = 70;
 
-        // Dark pit background
-        g.fillStyle(0x1a1a1a, 1);
-        g.fillRect(0, 10, w, h - 10);
+        // Deep dark pit background
+        g.fillStyle(0x0a0a0a, 1);
+        g.fillRect(0, 12, w, h - 12);
 
-        // Spikes inside pit
-        g.fillStyle(0xcccccc, 1);
-        for (let i = 10; i < w - 10; i += 15) {
-            g.fillTriangle(i, h, i + 7, 20, i + 14, h);
+        // LAVA at the bottom! Glowing molten danger
+        g.fillStyle(0xff3300, 0.7);
+        g.fillRect(5, h - 15, w - 10, 12);
+        g.fillStyle(0xff6600, 0.5);
+        g.fillRect(8, h - 18, w - 16, 8);
+        g.fillStyle(0xffaa00, 0.4);
+        g.fillRect(12, h - 20, w - 24, 5);
+
+        // Lava bubbles
+        g.fillStyle(0xffcc00, 0.8);
+        for (let i = 0; i < 5; i++) {
+            g.fillCircle(15 + i * 18, h - 10, 2 + Math.random() * 2);
         }
 
-        // Spike tips (sharper)
-        g.fillStyle(0xff3333, 1);
-        for (let i = 10; i < w - 10; i += 15) {
-            g.fillTriangle(i + 3, 30, i + 7, 18, i + 11, 30);
+        // Spikes inside pit - Back row (darker, heated)
+        g.fillStyle(0x444444, 1);
+        for (let i = 5; i < w - 5; i += 12) {
+            g.fillTriangle(i, h - 8, i + 6, h - 40, i + 12, h - 8);
         }
 
-        // Border/frame
+        // Spikes inside pit - Front row (sharper, glowing tips)
+        g.fillStyle(0x666666, 1);
+        for (let i = 10; i < w - 10; i += 15) {
+            // Main spike body
+            g.fillTriangle(i, h - 5, i + 7, h - 50, i + 14, h - 5);
+
+            // Metallic highlight on one side
+            g.fillStyle(0x888888, 0.6);
+            g.beginPath();
+            g.moveTo(i + 7, h - 50);
+            g.lineTo(i + 14, h - 5);
+            g.lineTo(i + 7, h - 5);
+            g.closePath();
+            g.fillPath();
+            g.fillStyle(0x666666, 1);
+        }
+
+        // HEATED spike tips - glowing from lava heat!
+        g.fillStyle(0xff4400, 1);
+        for (let i = 10; i < w - 10; i += 15) {
+            g.fillTriangle(i + 4, h - 42, i + 7, h - 50, i + 10, h - 42);
+        }
+        g.fillStyle(0xffaa00, 0.8);
+        for (let i = 10; i < w - 10; i += 15) {
+            g.fillCircle(i + 7, h - 48, 3);
+        }
+
+        // Frame/Border - heated metal
         g.lineStyle(4, 0x333333, 1);
         g.strokeRect(0, 10, w, h - 10);
+        g.lineStyle(2, 0xff6600, 0.3);
+        g.strokeRect(2, 12, w - 4, h - 14);
 
-        // Warning stripes on edge
+        // Warning stripes on top edge - DANGER RED
         g.fillStyle(0xff0000, 1);
-        g.fillRect(0, 0, w, 10);
+        g.fillRect(0, 0, w, 12);
         g.fillStyle(0x000000, 1);
-        for (let i = 0; i < w; i += 20) {
-            g.fillRect(i, 0, 10, 10);
+        for (let i = 0; i < w; i += 15) {
+            g.beginPath();
+            g.moveTo(i, 12);
+            g.lineTo(i + 8, 12);
+            g.lineTo(i + 13, 0);
+            g.lineTo(i + 5, 0);
+            g.closePath();
+            g.fillPath();
+        }
+
+        // Heat shimmer effect (wavy lines)
+        g.lineStyle(1, 0xff6600, 0.3);
+        for (let y = h - 25; y > 20; y -= 8) {
+            g.beginPath();
+            g.moveTo(10, y);
+            for (let x = 10; x < w - 10; x += 5) {
+                g.lineTo(x, y + Math.sin(x * 0.3) * 2);
+            }
+            g.strokePath();
         }
 
         g.generateTexture('spike_pit_open', w, h);
@@ -2588,24 +2720,38 @@ class GameScene extends Phaser.Scene {
 
     generateLavaGeyserDormantTexture() {
         const g = this.make.graphics();
-        const w = 80, h = 30;
+        const w = 100, h = 40;
 
-        // Vent base (dark metal)
-        g.fillStyle(0x3a3a3a, 1);
-        g.fillRect(0, 10, w, 20);
+        // Vent base (dark metal with glow)
+        g.fillStyle(0x2a2a2a, 1);
+        g.fillRect(0, 15, w, 25);
 
-        // Grate pattern
-        g.fillStyle(0x222222, 1);
-        g.fillRect(10, 12, 10, 16);
-        g.fillRect(25, 12, 10, 16);
-        g.fillRect(40, 12, 10, 16);
-        g.fillRect(55, 12, 10, 16);
+        // Metal rim
+        g.fillStyle(0x444444, 1);
+        g.fillRect(0, 15, w, 5);
 
-        // Glowing indicator (dormant - dim orange)
-        g.fillStyle(0x553300, 1);
-        g.fillCircle(w / 2, 5, 6);
-        g.fillStyle(0x884400, 0.5);
-        g.fillCircle(w / 2, 5, 4);
+        // Grate pattern with embers
+        g.fillStyle(0x1a1a1a, 1);
+        for (let i = 5; i < w - 5; i += 12) {
+            g.fillRect(i, 20, 8, 18);
+        }
+
+        // Glowing embers inside (warning of danger)
+        g.fillStyle(0xff3300, 0.6);
+        for (let i = 0; i < 4; i++) {
+            const ex = 15 + i * 20;
+            g.fillCircle(ex, 28, 3);
+        }
+
+        // Smoke wisps
+        g.fillStyle(0x666666, 0.4);
+        g.fillCircle(25, 8, 6);
+        g.fillCircle(50, 5, 8);
+        g.fillCircle(75, 10, 5);
+
+        // Warning glow at top
+        g.fillStyle(0xff4400, 0.3);
+        g.fillRect(5, 12, w - 10, 8);
 
         g.generateTexture('lava_geyser_dormant', w, h);
         g.destroy();
@@ -2613,34 +2759,73 @@ class GameScene extends Phaser.Scene {
 
     generateLavaGeyserActiveTexture() {
         const g = this.make.graphics();
-        const w = 80, h = 120;
+        const w = 100, h = 160;
 
         // Vent base
         g.fillStyle(0x3a3a3a, 1);
-        g.fillRect(0, h - 30, w, 30);
+        g.fillRect(0, h - 35, w, 35);
 
-        // Erupting lava column
-        g.fillStyle(0xff4500, 1);
-        g.fillRect(15, 20, 50, h - 50);
+        // Glowing hot metal rim
+        g.fillStyle(0xff6600, 1);
+        g.fillRect(0, h - 35, w, 5);
 
-        // Lava glow edges
-        g.fillStyle(0xff8c00, 0.8);
-        g.fillRect(10, 25, 10, h - 55);
-        g.fillRect(60, 25, 10, h - 55);
+        // MASSIVE fire column - multiple layers for depth
+        // Core (white hot)
+        g.fillStyle(0xffffcc, 1);
+        g.fillRect(30, 30, 40, h - 65);
 
-        // Lava bubbles
-        g.fillStyle(0xffcc00, 1);
-        for (let i = 0; i < 5; i++) {
-            const bx = 20 + Math.random() * 40;
-            const by = 30 + Math.random() * 60;
-            g.fillCircle(bx, by, 4 + Math.random() * 4);
+        // Inner fire (bright yellow)
+        g.fillStyle(0xffff00, 0.9);
+        g.fillRect(20, 25, 60, h - 55);
+
+        // Mid fire (orange)
+        g.fillStyle(0xff6600, 0.85);
+        g.fillRect(10, 20, 80, h - 50);
+
+        // Outer fire (red glow)
+        g.fillStyle(0xff3300, 0.7);
+        g.fillRect(5, 15, 90, h - 45);
+
+        // Fire edges (flickering effect)
+        g.fillStyle(0xff4400, 0.9);
+        for (let y = 20; y < h - 40; y += 15) {
+            // Left flames
+            g.fillTriangle(5, y, 15, y - 10, 15, y + 10);
+            // Right flames
+            g.fillTriangle(95, y, 85, y - 10, 85, y + 10);
         }
 
-        // Top flame/splash
+        // Lava bubbles and sparks
+        g.fillStyle(0xffff66, 1);
+        for (let i = 0; i < 12; i++) {
+            const bx = 15 + Math.random() * 70;
+            const by = 20 + Math.random() * 80;
+            g.fillCircle(bx, by, 2 + Math.random() * 5);
+        }
+
+        // Flying ember particles
+        g.fillStyle(0xffaa00, 1);
+        for (let i = 0; i < 8; i++) {
+            const ex = 10 + Math.random() * 80;
+            const ey = 10 + Math.random() * 40;
+            g.fillCircle(ex, ey, 2 + Math.random() * 3);
+        }
+
+        // Top flame crown - multiple peaks
         g.fillStyle(0xff6600, 1);
-        g.fillTriangle(20, 20, 40, 0, 60, 20);
-        g.fillStyle(0xffaa00, 0.7);
-        g.fillTriangle(30, 15, 40, 5, 50, 15);
+        g.fillTriangle(10, 25, 30, 0, 50, 25);
+        g.fillTriangle(30, 30, 50, 5, 70, 30);
+        g.fillTriangle(50, 25, 70, 0, 90, 25);
+
+        // Inner flame peaks (brighter)
+        g.fillStyle(0xffcc00, 0.9);
+        g.fillTriangle(25, 20, 40, 8, 55, 20);
+        g.fillTriangle(45, 20, 60, 8, 75, 20);
+
+        // White hot tips
+        g.fillStyle(0xffffaa, 0.8);
+        g.fillTriangle(35, 15, 40, 5, 45, 15);
+        g.fillTriangle(55, 15, 60, 5, 65, 15);
 
         g.generateTexture('lava_geyser_active', w, h);
         g.destroy();
@@ -3163,40 +3348,72 @@ class GameScene extends Phaser.Scene {
         if (trap.isActive || trap.cooldownTimer > 0) return;
 
         trap.isActive = true;
-        this.playSound('powerup'); // Reuse existing sound
 
         if (trap.type === 'spike_pit') {
-            // Open the pit
+            // Open the pit with dramatic effect
             trap.pit.setTexture('spike_pit_open');
             trap.switch.setTexture('trap_switch_pressed');
             trap.damageZone.body.enable = true;
 
-            // Camera shake for drama
-            this.shakeCamera(0.01, 150);
+            // Camera shake and flash for drama
+            this.shakeCamera(0.015, 200);
+            this.flashScreen(0xff3300, 0.2);
+            this.playSound('hurt'); // More dramatic sound
+
+            // Dust/debris effect
+            if (this.dustEmitter) {
+                this.dustEmitter.emitParticleAt(trap.pit.x - 30, trap.pit.y, 5);
+                this.dustEmitter.emitParticleAt(trap.pit.x + 30, trap.pit.y, 5);
+            }
 
             // Close after duration
             this.time.delayedCall(trap.activeDuration, () => {
-                trap.pit.setTexture('spike_pit_closed');
-                trap.switch.setTexture('trap_switch');
-                trap.damageZone.body.enable = false;
+                if (trap.pit) trap.pit.setTexture('spike_pit_closed');
+                if (trap.switch) trap.switch.setTexture('trap_switch');
+                if (trap.damageZone && trap.damageZone.body) trap.damageZone.body.enable = false;
                 trap.isActive = false;
                 trap.cooldownTimer = trap.cooldownDuration;
             });
 
         } else if (trap.type === 'lava_geyser') {
-            // Eruption!
+            // MASSIVE fire eruption!
             trap.geyser.setTexture('lava_geyser_active');
-            trap.geyser.y -= 45; // Raise for eruption visual
+            trap.geyser.y -= 60; // Raise higher for bigger eruption
             trap.damageZone.body.enable = true;
 
-            // Big shake
-            this.shakeCamera(0.02, 200);
+            // BIG shake and red flash - DANGER!
+            this.shakeCamera(0.035, 400);
+            this.flashScreen(0xff4400, 0.4);
+            this.playSound('hurt');
+
+            // Fire particles burst
+            if (this.dustEmitter) {
+                for (let i = 0; i < 10; i++) {
+                    this.dustEmitter.emitParticleAt(
+                        trap.geyser.x + (Math.random() - 0.5) * 60,
+                        trap.geyser.y - 20 - Math.random() * 40,
+                        3
+                    );
+                }
+            }
+
+            // Pulsing glow effect on geyser
+            this.tweens.add({
+                targets: trap.geyser,
+                alpha: 0.7,
+                duration: 100,
+                yoyo: true,
+                repeat: 5
+            });
 
             // End eruption after duration
             this.time.delayedCall(trap.activeDuration, () => {
-                trap.geyser.setTexture('lava_geyser_dormant');
-                trap.geyser.y += 45; // Lower back
-                trap.damageZone.body.enable = false;
+                if (trap.geyser) {
+                    trap.geyser.setTexture('lava_geyser_dormant');
+                    trap.geyser.y += 60; // Lower back
+                    trap.geyser.setAlpha(1);
+                }
+                if (trap.damageZone && trap.damageZone.body) trap.damageZone.body.enable = false;
                 trap.isActive = false;
                 trap.cooldownTimer = trap.cooldownDuration;
             });
@@ -3235,23 +3452,25 @@ class GameScene extends Phaser.Scene {
     }
 
     checkTrapDamage() {
-        if (!this.arenaTraps) return;
+        if (!this.arenaTraps || this.levelComplete || this.bossDefeated) return;
 
         this.arenaTraps.forEach(trap => {
-            if (!trap.isActive || !trap.damageZone.body.enable) return;
+            if (!trap.isActive || !trap.damageZone || !trap.damageZone.body || !trap.damageZone.body.enable) return;
 
             const damageRect = trap.damageZone.getBounds();
 
-            // Check if boss is hit
-            if (this.boss && !this.bossDefeated) {
+            // Check if boss is hit (prioritize boss damage over player damage)
+            if (this.boss && !this.bossDefeated && this.boss.body) {
                 const bossBounds = this.boss.getBounds();
                 if (Phaser.Geom.Rectangle.Overlaps(damageRect, bossBounds)) {
                     this.damageBossWithTrap(trap);
+                    // If boss just died, skip player damage check this frame
+                    if (this.bossDefeated) return;
                 }
             }
 
-            // Check if player is hit (self-damage!)
-            if (!this.isInvincible) {
+            // Check if player is hit (self-damage!) - but not if sliding
+            if (!this.isInvincible && !this.isSliding && this.player && this.player.body) {
                 const playerBounds = this.player.getBounds();
                 if (Phaser.Geom.Rectangle.Overlaps(damageRect, playerBounds)) {
                     this.damagePlayerWithTrap(trap);
@@ -3445,6 +3664,9 @@ class GameScene extends Phaser.Scene {
 
     hitBoss(player, boss) {
         if (this.bossDefeated || this.isInvincible) return;
+
+        // Sliding players pass through the boss!
+        if (this.isSliding) return;
 
         // Check if player is stomping (falling from above)
         const isStomping = player.body.velocity.y > 0 && player.y < boss.y - 30;
@@ -3832,11 +4054,13 @@ class GameScene extends Phaser.Scene {
                     this.bossDirection = -1;
                 }
 
-                // Random jump while patrolling
-                if (isOnGround && this.bossJumpCooldown <= 0 && Math.random() < 0.01) {
-                    this.boss.setVelocityY(-400);
-                    this.bossJumpCooldown = 2000;
-                    this.cameras.main.shake(150, 0.01);
+                // Random jump while patrolling - sometimes SUPER HIGH!
+                if (isOnGround && this.bossJumpCooldown <= 0 && Math.random() < 0.015) {
+                    const isSuperJump = Math.random() < 0.3; // 30% chance of super jump
+                    this.boss.setVelocityY(isSuperJump ? -700 : -450);
+                    this.bossJumpCooldown = isSuperJump ? 2500 : 1800;
+                    this.cameras.main.shake(isSuperJump ? 250 : 150, isSuperJump ? 0.02 : 0.01);
+                    if (isSuperJump) this.playSound('jump');
                 }
 
                 // Switch to charge after patrol time
@@ -3849,16 +4073,17 @@ class GameScene extends Phaser.Scene {
             case 'charge':
                 // Aggressive charge towards player!
                 const dirToPlayer = this.player.x < this.boss.x ? -1 : 1;
-                this.boss.setVelocityX(dirToPlayer * 180);
+                this.boss.setVelocityX(dirToPlayer * 200);
 
                 // Ground shake while charging
-                if (Math.random() < 0.15) {
-                    this.cameras.main.shake(80, 0.008);
+                if (Math.random() < 0.2) {
+                    this.cameras.main.shake(80, 0.01);
                 }
 
                 // Switch to jump attack after charge
                 if (this.bossStateTimer > 2000) {
-                    this.bossState = 'jump_attack';
+                    // 40% chance of MEGA jump attack instead of normal
+                    this.bossState = Math.random() < 0.4 ? 'mega_jump' : 'jump_attack';
                     this.bossStateTimer = 0;
                 }
                 break;
@@ -3867,9 +4092,9 @@ class GameScene extends Phaser.Scene {
                 // BIG jump towards player!
                 if (isOnGround && this.bossJumpCooldown <= 0) {
                     const jumpDir = this.player.x < this.boss.x ? -1 : 1;
-                    this.boss.setVelocityY(-500); // High jump!
-                    this.boss.setVelocityX(jumpDir * 150);
-                    this.bossJumpCooldown = 1500;
+                    this.boss.setVelocityY(-550);
+                    this.boss.setVelocityX(jumpDir * 180);
+                    this.bossJumpCooldown = 1200;
                     this.playSound('jump');
                 }
 
@@ -3881,13 +4106,42 @@ class GameScene extends Phaser.Scene {
                 }
                 break;
 
+            case 'mega_jump':
+                // MASSIVE jump - goes almost off screen!
+                if (isOnGround && this.bossJumpCooldown <= 0) {
+                    const jumpDir = this.player.x < this.boss.x ? -1 : 1;
+                    this.boss.setVelocityY(-850); // SUPER HIGH!
+                    this.boss.setVelocityX(jumpDir * 100);
+                    this.bossJumpCooldown = 2000;
+                    this.playSound('jump');
+                    // Warning shake before the massive landing
+                    this.cameras.main.shake(200, 0.015);
+                }
+
+                // Massive landing impact
+                if (isOnGround && Math.abs(this.boss.body.velocity.y) < 10 && this.bossStateTimer > 800) {
+                    this.cameras.main.shake(500, 0.04); // Earthquake!
+                    this.bossState = 'stomp';
+                    this.bossStateTimer = 0;
+                    // Stun lasts longer after mega jump
+                    this.bossStateTimer = -500; // Extra stun time
+                }
+                break;
+
             case 'stomp':
                 // Pause briefly after landing (vulnerable moment)
                 this.boss.setVelocityX(0);
 
                 if (this.bossStateTimer > 1000) {
-                    // Random next state
-                    this.bossState = Math.random() < 0.5 ? 'patrol' : 'charge';
+                    // Random next state - more variety
+                    const rand = Math.random();
+                    if (rand < 0.35) {
+                        this.bossState = 'patrol';
+                    } else if (rand < 0.7) {
+                        this.bossState = 'charge';
+                    } else {
+                        this.bossState = 'mega_jump'; // Sometimes chain into mega jump!
+                    }
                     this.bossStateTimer = 0;
                 }
                 break;
